@@ -1,0 +1,305 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState, useCallback } from "react";
+import { Plus, FileDown, Copy, Receipt } from "lucide-react";
+import {
+  computeDivision,
+  ensureMonth,
+  formatMonthLabel,
+  monthKey,
+  useStore,
+  type Expense,
+} from "@/lib/condo-store";
+import { generateCondoPDF } from "@/lib/generate-pdf";
+import { toast } from "sonner";
+import { SavedIndicator } from "@/components/saved-indicator";
+import { MonthSwitcher } from "@/components/month-switcher";
+import { ExpenseRow } from "@/components/expense-row";
+import { DivisionPreview } from "@/components/division-preview";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+
+export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Condomínio - Despesas do mês" },
+      {
+        name: "description",
+        content:
+          "Gestão simples de despesas mensais do condomínio e geração de PDF de rateio.",
+      },
+    ],
+  }),
+  component: HomePage,
+});
+
+const brl = (n: number) =>
+  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+function HomePage() {
+  const { store, setStore } = useStore();
+  const [cursor, setCursor] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+
+  // Estado do AlertDialog único (exclusão)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    nome: string;
+  } | null>(null);
+
+  // Estado do confirm para copiar mês quando já tem dados
+  const [confirmCopy, setConfirmCopy] = useState(false);
+
+  const key = monthKey(cursor);
+  const month = ensureMonth(store, key);
+  const label = formatMonthLabel(cursor);
+
+  const now = new Date();
+  const isCurrentMonth =
+    cursor.getFullYear() === now.getFullYear() &&
+    cursor.getMonth() === now.getMonth();
+
+  const { total, perApt } = useMemo(
+    () => computeDivision(month, store.apartments, store.divisionRules),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [month.expenses, store.apartments, store.divisionRules],
+  );
+
+  function updateMonth(updater: (expenses: Expense[]) => Expense[]) {
+    setStore((s) => ({
+      ...s,
+      months: {
+        ...s.months,
+        [key]: { expenses: updater(ensureMonth(s, key).expenses) },
+      },
+    }));
+  }
+
+  function shiftMonth(delta: number) {
+    setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
+  }
+
+  const doCopy = useCallback(() => {
+    const prevDate = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1);
+    const prevKey = monthKey(prevDate);
+    const prevMonth = ensureMonth(store, prevKey);
+
+    if (prevMonth.expenses.length === 0) {
+      toast.info("O mês anterior não possui despesas para copiar.");
+      return;
+    }
+
+    const newExpenses = prevMonth.expenses.map((e) => ({
+      ...e,
+      id: crypto.randomUUID(),
+      valor: 0,
+    }));
+
+    setStore((s) => ({
+      ...s,
+      months: {
+        ...s.months,
+        [key]: { expenses: newExpenses },
+      },
+    }));
+
+    toast.success("Despesas copiadas do mês anterior (valores zerados).");
+  }, [cursor, store, key, setStore]);
+
+  function copyPreviousMonth() {
+    // Se o mês já tem despesas com dados, confirmar antes
+    const hasData = month.expenses.some((e) => e.nome.trim() || e.valor > 0);
+    if (hasData) {
+      setConfirmCopy(true);
+    } else {
+      doCopy();
+    }
+  }
+
+  async function handleGeneratePDF() {
+    try {
+      await generateCondoPDF({
+        condoName: store.condoName,
+        monthLabel: label,
+        month,
+        apartments: store.apartments,
+        rules: store.divisionRules,
+        sindico: store.sindico,
+      });
+      toast.success("PDF gerado com sucesso! Verifique seus downloads.");
+    } catch {
+      toast.error("Erro ao gerar o PDF. Tente novamente.");
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-background pb-44">
+      {/* Header */}
+      <header className="sticky top-0 z-10 bg-cream-deep/95 backdrop-blur border-b border-border">
+        <div className="mx-auto max-w-2xl px-4 py-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+          <h1 className="truncate text-xl font-bold text-primary">
+            {store.condoName}
+          </h1>
+          <SavedIndicator />
+        </div>
+
+        <MonthSwitcher
+          label={label}
+          isCurrentMonth={isCurrentMonth}
+          onPrev={() => shiftMonth(-1)}
+          onNext={() => shiftMonth(1)}
+        />
+      </header>
+
+      {/* Expenses list */}
+      <main className="mx-auto max-w-2xl px-4 py-4">
+        <div className="rounded-2xl bg-card border border-border overflow-hidden shadow-sm">
+          <div className="grid grid-cols-[minmax(0,1fr)_140px_44px] items-center gap-2 px-4 py-3 bg-secondary/60 text-xs font-semibold uppercase tracking-wider text-secondary-foreground">
+            <span>Despesa</span>
+            <span className="text-right">Valor</span>
+            <span></span>
+          </div>
+
+          {/* Empty state */}
+          {month.expenses.length === 0 && (
+            <div className="p-8 text-center">
+              <Receipt className="size-12 mx-auto text-muted-foreground/50 mb-3" />
+              <p className="text-muted-foreground text-base mb-4">
+                Nenhuma despesa neste mês.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                <button
+                  onClick={() =>
+                    updateMonth((exps) => [
+                      ...exps,
+                      {
+                        id: crypto.randomUUID(),
+                        nome: "",
+                        valor: 0,
+                        tipoDivisao: "igual",
+                      },
+                    ])
+                  }
+                  className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 bg-primary text-primary-foreground font-semibold shadow hover:opacity-90 transition min-h-[44px]"
+                >
+                  <Plus className="size-5" /> Adicionar despesa
+                </button>
+                <button
+                  onClick={copyPreviousMonth}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 bg-secondary text-secondary-foreground font-medium hover:bg-accent/30 transition min-h-[44px]"
+                >
+                  <Copy className="size-5" /> Copiar mês anterior
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Expense rows */}
+          {month.expenses.map((e) => (
+            <ExpenseRow
+              key={e.id}
+              expense={e}
+              rules={store.divisionRules}
+              onChangeName={(name) =>
+                updateMonth((exps) =>
+                  exps.map((x) =>
+                    x.id === e.id ? { ...x, nome: name } : x,
+                  ),
+                )
+              }
+              onChangeValue={(val) =>
+                updateMonth((exps) =>
+                  exps.map((x) =>
+                    x.id === e.id ? { ...x, valor: val } : x,
+                  ),
+                )
+              }
+              onRequestDelete={() =>
+                setDeleteTarget({ id: e.id, nome: e.nome })
+              }
+            />
+          ))}
+
+          {/* Add expense + copy buttons */}
+          {month.expenses.length > 0 && (
+            <div className="flex border-t border-border">
+              <button
+                onClick={() =>
+                  updateMonth((exps) => [
+                    ...exps,
+                    {
+                      id: crypto.randomUUID(),
+                      nome: "",
+                      valor: 0,
+                      tipoDivisao: "igual",
+                    },
+                  ])
+                }
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-primary font-medium hover:bg-accent/20 transition min-h-[44px]"
+              >
+                <Plus className="size-5" /> Adicionar
+              </button>
+              <button
+                onClick={copyPreviousMonth}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-secondary-foreground font-medium hover:bg-accent/20 transition border-l border-border min-h-[44px]"
+              >
+                <Copy className="size-5" /> Copiar mês anterior
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Preview divisão */}
+        {store.apartments.length > 0 && <DivisionPreview perApt={perApt} />}
+      </main>
+
+      {/* Fixed footer with total + PDF */}
+      <footer className="fixed bottom-14 inset-x-0 bg-cream-deep/95 backdrop-blur border-t border-border">
+        <div className="mx-auto max-w-2xl px-4 py-4 flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
+              Total do mês
+            </div>
+            <div className="text-3xl font-extrabold text-foreground tabular-nums truncate">
+              {brl(total)}
+            </div>
+          </div>
+          <button
+            onClick={handleGeneratePDF}
+            className="shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-3.5 bg-primary text-primary-foreground font-semibold shadow hover:opacity-90 transition min-h-[48px] text-base"
+          >
+            <FileDown className="size-5" /> Gerar PDF
+          </button>
+        </div>
+      </footer>
+
+      {/* Single delete confirmation dialog */}
+      <ConfirmDeleteDialog
+        open={deleteTarget !== null}
+        title="Excluir despesa"
+        description={`Tem certeza que deseja excluir "${deleteTarget?.nome || "esta despesa"}"? Esta ação não pode ser desfeita.`}
+        onConfirm={() => {
+          if (deleteTarget) {
+            updateMonth((exps) =>
+              exps.filter((x) => x.id !== deleteTarget.id),
+            );
+          }
+          setDeleteTarget(null);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Confirm copy over existing data */}
+      <ConfirmDeleteDialog
+        open={confirmCopy}
+        title="Substituir despesas?"
+        description="Este mês já possui despesas cadastradas. Ao copiar do mês anterior, as despesas atuais serão substituídas. Deseja continuar?"
+        onConfirm={() => {
+          setConfirmCopy(false);
+          doCopy();
+        }}
+        onCancel={() => setConfirmCopy(false)}
+      />
+    </div>
+  );
+}
