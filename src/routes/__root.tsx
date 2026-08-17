@@ -5,12 +5,15 @@ import {
   createRootRouteWithContext,
   useRouter,
   useRouterState,
+  useNavigate,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
-import { Receipt, Settings } from "lucide-react";
+import { Receipt, Settings, LogOut } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { setCloudUserId, loadFromCloud, replaceStore } from "@/lib/condo-store";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -121,9 +124,85 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
+      <Toaster position="top-center" richColors />
+    </QueryClientProvider>
+  );
+}
+
+function AuthGate() {
+  const { user, loading, signOut } = useAuth();
+  const navigate = useNavigate();
   const routerState = useRouterState();
   const currentPath = routerState.location.pathname;
 
+  // Set cloud user ID and load data when user changes
+  useEffect(() => {
+    if (user) {
+      setCloudUserId(user.id);
+      // Load data from cloud on login
+      loadFromCloud().then((cloudData) => {
+        if (cloudData) {
+          replaceStore(cloudData);
+        }
+      });
+    } else {
+      setCloudUserId(null);
+    }
+  }, [user?.id]);
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!loading && !user && currentPath !== "/login") {
+      navigate({ to: "/login" });
+    }
+  }, [loading, user, currentPath, navigate]);
+
+  // Redirect away from login if already authenticated
+  useEffect(() => {
+    if (!loading && user && currentPath === "/login") {
+      navigate({ to: "/" });
+    }
+  }, [loading, user, currentPath, navigate]);
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // On login page, just render the outlet (no nav bar)
+  if (currentPath === "/login") {
+    return <Outlet />;
+  }
+
+  // Not authenticated and not on login - will redirect
+  if (!user) {
+    return null;
+  }
+
+  // Register service worker for offline support
+  return <AuthenticatedLayout signOut={signOut} currentPath={currentPath} />;
+}
+
+function AuthenticatedLayout({
+  signOut,
+  currentPath,
+}: {
+  signOut: () => Promise<void>;
+  currentPath: string;
+}) {
   // Register service worker for offline support
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -134,7 +213,7 @@ function RootComponent() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
 
@@ -143,7 +222,7 @@ function RootComponent() {
         className="fixed bottom-0 inset-x-0 z-50 bg-cream-deep/95 backdrop-blur border-t border-border safe-area-bottom"
         aria-label="Navegação principal"
       >
-        <div className="mx-auto max-w-2xl grid grid-cols-2">
+        <div className="mx-auto max-w-2xl grid grid-cols-3">
           <Link
             to="/"
             className={`flex flex-col items-center gap-0.5 py-2 pt-3 transition min-h-[56px] justify-center ${
@@ -170,10 +249,16 @@ function RootComponent() {
             <Settings className="size-6" />
             <span className="text-xs">Ajustes</span>
           </Link>
+          <button
+            onClick={() => signOut()}
+            className="flex flex-col items-center gap-0.5 py-2 pt-3 transition min-h-[56px] justify-center text-muted-foreground hover:text-destructive"
+            aria-label="Sair"
+          >
+            <LogOut className="size-6" />
+            <span className="text-xs">Sair</span>
+          </button>
         </div>
       </nav>
-
-      <Toaster position="top-center" richColors />
-    </QueryClientProvider>
+    </>
   );
 }

@@ -1,10 +1,18 @@
 import { useSyncExternalStore } from "react";
+import { saveStoreToCloud, loadStoreFromCloud } from "@/lib/supabase-sync";
 
 export type Apartment = {
   id: string;
   numero: string;
-  morador: string;
-  indiceCopasa: number; // consumo em m³ ou índice proporcional
+  morador: string; // proprietário
+  inquilino?: string; // nome do inquilino (se vazio/undefined = sem inquilino)
+  indiceCopasa: number; // fração ideal (%) — soma de todas as unidades deve ser 100
+};
+
+export type Responsavel = {
+  nome: string;
+  telefone: string;
+  email: string;
 };
 
 export type Expense = {
@@ -26,10 +34,16 @@ export type Store = {
   condoName: string;
   divisionRules?: DivisionRules;
   sindico?: string;
+  responsavel?: Responsavel;
+  vencimentoDia?: number; // dia do mês para vencimento (ex: 10)
+  fundoReserva?: number; // valor fixo por unidade
+  fundoObras?: number; // valor fixo por unidade (cobrado do proprietário)
+  decimoTerceiroFerias?: number; // valor total a ser dividido igualmente
 };
 
 const KEY = "condo-store-v1";
 const DEBOUNCE_MS = 300;
+const CLOUD_DEBOUNCE_MS = 2000;
 
 const defaultStore: Store = {
   condoName: "Meu Condomínio",
@@ -48,6 +62,30 @@ const defaultExpenses = (): Expense[] => [
   { id: crypto.randomUUID(), nome: "Manutenção", valor: 0, tipoDivisao: "igual" },
 ];
 
+// --- Cloud sync ---
+
+let currentUserId: string | null = null;
+let cloudSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function setCloudUserId(userId: string | null) {
+  currentUserId = userId;
+}
+
+function persistToCloud(s: Store) {
+  if (!currentUserId) return;
+  if (cloudSaveTimer !== null) clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(() => {
+    saveStoreToCloud(currentUserId!, s);
+    cloudSaveTimer = null;
+  }, CLOUD_DEBOUNCE_MS);
+}
+
+export async function loadFromCloud(): Promise<Store | null> {
+  if (!currentUserId) return null;
+  const { data } = await loadStoreFromCloud(currentUserId);
+  return data;
+}
+
 // --- Persistence with debounce ---
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -60,6 +98,8 @@ function persistToStorage(s: Store) {
     savedListeners.forEach((l) => l());
     saveTimer = null;
   }, DEBOUNCE_MS);
+  // Also persist to cloud
+  persistToCloud(s);
 }
 
 function loadFromStorage(): Store {
@@ -103,6 +143,18 @@ export function setStore(updater: (s: Store) => Store) {
   current = next;
   persistToStorage(next);
   listeners.forEach((l) => l());
+}
+
+/**
+ * Replace the entire store (used when loading from cloud after login).
+ * Also persists to localStorage.
+ */
+export function replaceStore(s: Store) {
+  current = s;
+  localStorage.setItem(KEY, JSON.stringify(s));
+  lastSavedAt = Date.now();
+  listeners.forEach((l) => l());
+  savedListeners.forEach((l) => l());
 }
 
 // --- "Last saved" tracking ---

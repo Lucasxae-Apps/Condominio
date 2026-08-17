@@ -1,0 +1,4 @@
+.kiro
+supabase-schema.sql
+.env.example
+AGENTS.md

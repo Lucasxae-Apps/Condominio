@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { Plus, Trash2, Download, Upload } from "lucide-react";
-import { listExpenseNames, useStore, type Store } from "@/lib/condo-store";
+import { useStore, type Store } from "@/lib/condo-store";
 import { storeSchema } from "@/lib/store-schema";
+import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { SavedIndicator } from "@/components/saved-indicator";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
@@ -23,6 +24,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsPage() {
   const { store, setStore } = useStore();
+  const { isAdmin } = useAuth();
   const importRef = useRef<HTMLInputElement>(null);
 
   // Estado do AlertDialog único para exclusão de apartamento
@@ -79,7 +81,15 @@ function SettingsPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-4 py-4 space-y-6">
+      {!isAdmin && (
+        <div className="mx-auto max-w-2xl px-4 pt-4">
+          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+            🔒 Modo visualização — apenas administradores podem editar.
+          </div>
+        </div>
+      )}
+
+      <main className={`mx-auto max-w-2xl px-4 py-4 space-y-6 ${!isAdmin ? "pointer-events-none opacity-75 select-none" : ""}`}>
         {/* Nome condomínio */}
         <section className="rounded-2xl bg-card border border-border p-4 shadow-sm">
           <label
@@ -98,26 +108,189 @@ function SettingsPage() {
           />
         </section>
 
-        {/* Síndico / Responsável */}
-        <section className="rounded-2xl bg-card border border-border p-4 shadow-sm">
-          <label
-            htmlFor="sindico-name"
-            className="text-xs uppercase tracking-wider font-semibold text-muted-foreground"
-          >
-            Síndico / Responsável
-          </label>
-          <p className="text-xs text-muted-foreground mt-1 mb-2">
-            Nome que aparecerá na assinatura do PDF gerado.
-          </p>
+        {/* Responsável (nome, telefone, email) */}
+        <section className="rounded-2xl bg-card border border-border p-4 shadow-sm space-y-3">
+          <div>
+            <span className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
+              Responsável / Síndico
+            </span>
+            <p className="text-xs text-muted-foreground mt-1">
+              Dados que aparecerão no rodapé do PDF gerado.
+            </p>
+          </div>
           <input
-            id="sindico-name"
-            value={store.sindico ?? ""}
+            value={store.responsavel?.nome ?? store.sindico ?? ""}
             onChange={(e) =>
-              setStore((s) => ({ ...s, sindico: e.target.value }))
+              setStore((s) => ({
+                ...s,
+                sindico: e.target.value,
+                responsavel: {
+                  nome: e.target.value,
+                  telefone: s.responsavel?.telefone ?? "",
+                  email: s.responsavel?.email ?? "",
+                },
+              }))
             }
-            placeholder="Ex: João da Silva"
+            placeholder="Nome completo"
+            aria-label="Nome do responsável"
             className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base font-medium min-h-[44px]"
           />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input
+              type="tel"
+              inputMode="tel"
+              value={store.responsavel?.telefone ?? ""}
+              onChange={(e) =>
+                setStore((s) => ({
+                  ...s,
+                  responsavel: {
+                    nome: s.responsavel?.nome ?? s.sindico ?? "",
+                    telefone: e.target.value,
+                    email: s.responsavel?.email ?? "",
+                  },
+                }))
+              }
+              placeholder="Telefone"
+              aria-label="Telefone do responsável"
+              className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
+            />
+            <input
+              type="email"
+              inputMode="email"
+              value={store.responsavel?.email ?? ""}
+              onChange={(e) =>
+                setStore((s) => ({
+                  ...s,
+                  responsavel: {
+                    nome: s.responsavel?.nome ?? s.sindico ?? "",
+                    telefone: s.responsavel?.telefone ?? "",
+                    email: e.target.value,
+                  },
+                }))
+              }
+              placeholder="Email"
+              aria-label="Email do responsável"
+              className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
+            />
+          </div>
+        </section>
+
+        {/* Valores fixos mensais (Fundo de Reserva, Fundo de Obras, 13º/Férias, Vencimento) */}
+        <section className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+          <div className="px-4 py-3 bg-secondary/60">
+            <h2 className="font-semibold text-secondary-foreground text-base">
+              Valores fixos do rateio
+            </h2>
+          </div>
+          <div className="p-4 space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Estes valores são adicionados ao rateio mensal além das despesas variáveis.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-foreground">
+                  Fundo de Reserva (por unidade)
+                </span>
+                <div className="relative flex items-center">
+                  <span className="absolute left-4 text-muted-foreground text-sm pointer-events-none">R$</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={store.fundoReserva ?? ""}
+                    onChange={(e) =>
+                      setStore((s) => ({
+                        ...s,
+                        fundoReserva: Number(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="0,00"
+                    aria-label="Fundo de Reserva por unidade"
+                    className="w-full bg-background border border-border rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base tabular-nums min-h-[44px]"
+                  />
+                </div>
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-foreground">
+                  Fundo de Obras (por unidade)
+                </span>
+                <div className="relative flex items-center">
+                  <span className="absolute left-4 text-muted-foreground text-sm pointer-events-none">R$</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={store.fundoObras ?? ""}
+                    onChange={(e) =>
+                      setStore((s) => ({
+                        ...s,
+                        fundoObras: Number(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="0,00"
+                    aria-label="Fundo de Obras por unidade"
+                    className="w-full bg-background border border-border rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base tabular-nums min-h-[44px]"
+                  />
+                </div>
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-foreground">
+                  13º / Férias / ADM (total)
+                </span>
+                <div className="relative flex items-center">
+                  <span className="absolute left-4 text-muted-foreground text-sm pointer-events-none">R$</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    value={store.decimoTerceiroFerias ?? ""}
+                    onChange={(e) =>
+                      setStore((s) => ({
+                        ...s,
+                        decimoTerceiroFerias: Number(e.target.value) || 0,
+                      }))
+                    }
+                    placeholder="0,00"
+                    aria-label="13º Férias ADM total"
+                    className="w-full bg-background border border-border rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base tabular-nums min-h-[44px]"
+                  />
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  Será dividido igualmente entre as unidades.
+                </span>
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-sm font-medium text-foreground">
+                  Dia de vencimento
+                </span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="1"
+                  max="31"
+                  value={store.vencimentoDia ?? 10}
+                  onChange={(e) =>
+                    setStore((s) => ({
+                      ...s,
+                      vencimentoDia: Math.min(31, Math.max(1, Number(e.target.value) || 10)),
+                    }))
+                  }
+                  aria-label="Dia de vencimento"
+                  className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base tabular-nums min-h-[44px]"
+                />
+                <span className="text-xs text-muted-foreground">
+                  Vencimento no mês seguinte ao de referência.
+                </span>
+              </label>
+            </div>
+          </div>
         </section>
 
         {/* Apartamentos */}
@@ -163,8 +336,8 @@ function SettingsPage() {
                         ),
                       }))
                     }
-                    placeholder="Nome do morador"
-                    aria-label={`Morador do apto ${apt.numero || ""}`}
+                    placeholder="Proprietário"
+                    aria-label={`Proprietário do apto ${apt.numero || ""}`}
                     className="w-full bg-background border border-border rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
                   />
                   <button
@@ -180,32 +353,42 @@ function SettingsPage() {
                     <Trash2 className="size-5" />
                   </button>
                 </div>
-                <label className="flex items-center gap-2 pl-1">
-                  <span className="text-sm text-muted-foreground min-w-fit">
-                    Índice Copasa:
-                  </span>
+
+                {/* Inquilino */}
+                <div className="pl-1">
                   <input
-                    type="number"
-                    inputMode="decimal"
-                    value={apt.indiceCopasa === 0 ? "" : apt.indiceCopasa}
+                    value={apt.inquilino ?? ""}
                     onChange={(e) =>
                       setStore((s) => ({
                         ...s,
                         apartments: s.apartments.map((a) =>
                           a.id === apt.id
-                            ? {
-                                ...a,
-                                indiceCopasa: Number(e.target.value) || 0,
-                              }
+                            ? { ...a, inquilino: e.target.value }
                             : a,
                         ),
                       }))
                     }
-                    placeholder="0"
-                    aria-label={`Índice Copasa do apto ${apt.numero || ""}`}
-                    className="flex-1 bg-background border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring tabular-nums text-base min-h-[44px]"
+                    placeholder="Inquilino (deixe vazio se não tiver)"
+                    aria-label={`Inquilino do apto ${apt.numero || ""}`}
+                    className="w-full bg-background border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring text-sm min-h-[44px]"
                   />
-                </label>
+                </div>
+
+                {/* Fração ideal (%) */}
+                <FracaoIdealInput
+                  value={apt.indiceCopasa}
+                  onChange={(val) =>
+                    setStore((s) => ({
+                      ...s,
+                      apartments: s.apartments.map((a) =>
+                        a.id === apt.id
+                          ? { ...a, indiceCopasa: val }
+                          : a,
+                      ),
+                    }))
+                  }
+                  apartamento={apt.numero}
+                />
               </div>
             ))}
           </div>
@@ -229,51 +412,23 @@ function SettingsPage() {
           >
             <Plus className="size-5" /> Adicionar apartamento
           </button>
-        </section>
 
-        {/* Tipo de divisão por despesa */}
-        <section className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
-          <div className="px-4 py-3 bg-secondary/60">
-            <h2 className="font-semibold text-secondary-foreground text-base">
-              Tipo de divisão das despesas
-            </h2>
-          </div>
-          <div className="divide-y divide-border">
-            {listExpenseNames(store).map((nome) => (
-              <div
-                key={nome}
-                className="px-4 py-3 flex items-center justify-between gap-3"
-              >
-                <span className="text-base font-medium min-w-0 truncate">
-                  {nome}
+          {/* Total da fração ideal */}
+          {store.apartments.length > 0 && (() => {
+            const totalFracao = store.apartments.reduce((s, a) => s + (a.indiceCopasa || 0), 0);
+            const totalFormatted = totalFracao.toFixed(5);
+            const isValid = Math.abs(totalFracao - 1) < 0.0001;
+            return (
+              <div className={`px-4 py-2.5 border-t border-border flex items-center justify-between text-sm ${isValid ? "text-green-700 bg-green-50" : "text-amber-700 bg-amber-50"}`}>
+                <span className="font-medium">Total fração ideal:</span>
+                <span className="font-bold tabular-nums">
+                  {totalFormatted}{" "}
+                  {isValid ? "✓" : `(deve somar 1.00000)`}
                 </span>
-                <select
-                  value={store.divisionRules?.[nome] ?? "igual"}
-                  onChange={(e) =>
-                    setStore((s) => ({
-                      ...s,
-                      divisionRules: {
-                        ...(s.divisionRules ?? {}),
-                        [nome]: e.target.value as "igual" | "copasa",
-                      },
-                    }))
-                  }
-                  aria-label={`Tipo de divisão para ${nome}`}
-                  className="shrink-0 text-base px-3 py-2.5 rounded-xl bg-background border border-border focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
-                >
-                  <option value="igual">Dividir igual</option>
-                  <option value="copasa">Por consumo (Copasa)</option>
-                </select>
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </section>
-
-        <p className="text-sm text-muted-foreground px-1">
-          O índice Copasa é usado para dividir despesas marcadas como "por
-          consumo". As despesas marcadas como "dividir igual" são rateadas em
-          partes iguais entre todos os apartamentos.
-        </p>
 
         {/* Backup: Export/Import */}
         <section className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
@@ -330,5 +485,47 @@ function SettingsPage() {
         onCancel={() => setDeleteTarget(null)}
       />
     </div>
+  );
+}
+
+/** Input controlado para fração ideal que permite digitar decimais como "0.8" sem limpar */
+function FracaoIdealInput({
+  value,
+  onChange,
+  apartamento,
+}: {
+  value: number;
+  onChange: (val: number) => void;
+  apartamento: string;
+}) {
+  const [focused, setFocused] = useState(false);
+  const [raw, setRaw] = useState("");
+
+  const displayValue = focused ? raw : value === 0 ? "" : String(value);
+
+  return (
+    <label className="flex items-center gap-2 pl-1">
+      <span className="text-sm text-muted-foreground min-w-fit">
+        Fração ideal (%):
+      </span>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={displayValue}
+        onFocus={() => {
+          setFocused(true);
+          setRaw(value === 0 ? "" : String(value));
+        }}
+        onBlur={() => {
+          setFocused(false);
+          const parsed = parseFloat(raw.replace(",", "."));
+          onChange(isNaN(parsed) ? 0 : Math.round(parsed * 100000) / 100000);
+        }}
+        onChange={(e) => setRaw(e.target.value)}
+        placeholder="0.000"
+        aria-label={`Fração ideal do apto ${apartamento || ""}`}
+        className="flex-1 bg-background border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring tabular-nums text-base min-h-[44px]"
+      />
+    </label>
   );
 }

@@ -10,6 +10,7 @@ import {
   type Expense,
 } from "@/lib/condo-store";
 import { generateCondoPDF } from "@/lib/generate-pdf";
+import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { SavedIndicator } from "@/components/saved-indicator";
 import { MonthSwitcher } from "@/components/month-switcher";
@@ -36,6 +37,7 @@ const brl = (n: number) =>
 
 function HomePage() {
   const { store, setStore } = useStore();
+  const { isAdmin } = useAuth();
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -125,6 +127,8 @@ function HomePage() {
         apartments: store.apartments,
         rules: store.divisionRules,
         sindico: store.sindico,
+        store,
+        cursor,
       });
       toast.success("PDF gerado com sucesso! Verifique seus downloads.");
     } catch {
@@ -167,30 +171,32 @@ function HomePage() {
               <p className="text-muted-foreground text-base mb-4">
                 Nenhuma despesa neste mês.
               </p>
-              <div className="flex flex-col sm:flex-row gap-2 justify-center">
-                <button
-                  onClick={() =>
-                    updateMonth((exps) => [
-                      ...exps,
-                      {
-                        id: crypto.randomUUID(),
-                        nome: "",
-                        valor: 0,
-                        tipoDivisao: "igual",
-                      },
-                    ])
-                  }
-                  className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 bg-primary text-primary-foreground font-semibold shadow hover:opacity-90 transition min-h-[44px]"
-                >
-                  <Plus className="size-5" /> Adicionar despesa
-                </button>
-                <button
-                  onClick={copyPreviousMonth}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 bg-secondary text-secondary-foreground font-medium hover:bg-accent/30 transition min-h-[44px]"
-                >
-                  <Copy className="size-5" /> Copiar mês anterior
-                </button>
-              </div>
+              {isAdmin && (
+                <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                  <button
+                    onClick={() =>
+                      updateMonth((exps) => [
+                        ...exps,
+                        {
+                          id: crypto.randomUUID(),
+                          nome: "",
+                          valor: 0,
+                          tipoDivisao: "igual",
+                        },
+                      ])
+                    }
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 bg-primary text-primary-foreground font-semibold shadow hover:opacity-90 transition min-h-[44px]"
+                  >
+                    <Plus className="size-5" /> Adicionar despesa
+                  </button>
+                  <button
+                    onClick={copyPreviousMonth}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 bg-secondary text-secondary-foreground font-medium hover:bg-accent/30 transition min-h-[44px]"
+                  >
+                    <Copy className="size-5" /> Copiar mês anterior
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -200,6 +206,7 @@ function HomePage() {
               key={e.id}
               expense={e}
               rules={store.divisionRules}
+              readOnly={!isAdmin}
               onChangeName={(name) =>
                 updateMonth((exps) =>
                   exps.map((x) =>
@@ -221,7 +228,7 @@ function HomePage() {
           ))}
 
           {/* Add expense + copy buttons */}
-          {month.expenses.length > 0 && (
+          {month.expenses.length > 0 && isAdmin && (
             <div className="flex border-t border-border">
               <button
                 onClick={() =>
