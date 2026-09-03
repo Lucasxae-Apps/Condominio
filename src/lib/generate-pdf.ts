@@ -1,7 +1,7 @@
 /**
  * Geração do PDF de Rateio de Condomínio
  *
- * Reproduz o layout especificado: cabeçalho azul, bloco-resumo, tabela detalhada,
+ * Reproduz o layout especificado: cabeçalho verde, bloco-resumo, tabela detalhada,
  * cards individuais por cobrança, bloco-resumo final e rodapé de contato.
  */
 import type { Apartment, DivisionRules, MonthData, Responsavel, Store } from "./condo-store";
@@ -47,13 +47,13 @@ type DadosPdfRateio = {
 };
 
 // --- Colors ---
-const AZUL_PRINCIPAL = [0, 74, 153] as const; // #004A99
 const TEXTO_CORPO = [30, 41, 59] as const; // #1E293B
 const FUNDO_HEADER_TABELA = [242, 245, 250] as const; // #F2F5FA
 const ZEBRA_CLARA = [247, 250, 252] as const; // #F7FAFC
 const FUNDO_CARD = [250, 250, 252] as const; // #FAFAFC
 const BORDA_CARD = [229, 231, 235] as const; // #E5E7EB
 const CINZA_NOTA = [107, 114, 128] as const; // #6B7280
+const VERDE_BASE = [9, 112, 78] as const; // #09704E
 
 // --- Utilities ---
 const brl = (n: number): string =>
@@ -242,9 +242,9 @@ export async function generateRateioPDF(opts: {
     }
   }
 
-  // ===== 4.1 CABEÇALHO AZUL (só página 1) =====
+  // ===== 4.1 CABEÇALHO VERDE (só página 1) =====
   const headerH = 90;
-  doc.setFillColor(...AZUL_PRINCIPAL);
+  doc.setFillColor(...VERDE_BASE);
   doc.rect(0, 0, pageW, headerH, "F");
 
   // Nome do condomínio
@@ -373,7 +373,7 @@ export async function generateRateioPDF(opts: {
     // Faixa TOTAL
     checkPageBreak(28);
     const totalBarH = 24;
-    d.setFillColor(...AZUL_PRINCIPAL);
+    d.setFillColor(...VERDE_BASE);
     d.rect(mx, y - 4, cw, totalBarH, "F");
     d.setFont("helvetica", "bold");
     d.setFontSize(12);
@@ -487,7 +487,7 @@ export async function generateRateioPDF(opts: {
     // Total row
     checkPageBreak(22);
     const totalRowH = 22;
-    d.setFillColor(...AZUL_PRINCIPAL);
+    d.setFillColor(...VERDE_BASE);
     d.rect(mx, y - 2, cw, totalRowH, "F");
     d.setFont("helvetica", "bold");
     d.setFontSize(9);

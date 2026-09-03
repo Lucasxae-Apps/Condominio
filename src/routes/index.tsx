@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useCallback } from "react";
-import { Plus, FileDown, Copy, Receipt } from "lucide-react";
+import { Plus, Copy, Receipt } from "lucide-react";
 import {
   computeDivision,
   ensureMonth,
@@ -9,7 +9,6 @@ import {
   useStore,
   type Expense,
 } from "@/lib/condo-store";
-import { generateCondoPDF } from "@/lib/generate-pdf";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { SavedIndicator } from "@/components/saved-indicator";
@@ -77,6 +76,18 @@ function HomePage() {
     }));
   }
 
+  function addExpense() {
+    updateMonth((exps) => [
+      ...exps,
+      {
+        id: crypto.randomUUID(),
+        nome: "",
+        valor: 0,
+        tipoDivisao: "igual",
+      },
+    ]);
+  }
+
   function shiftMonth(delta: number) {
     setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
   }
@@ -118,24 +129,6 @@ function HomePage() {
     }
   }
 
-  async function handleGeneratePDF() {
-    try {
-      await generateCondoPDF({
-        condoName: store.condoName,
-        monthLabel: label,
-        month,
-        apartments: store.apartments,
-        rules: store.divisionRules,
-        sindico: store.sindico,
-        store,
-        cursor,
-      });
-      toast.success("PDF gerado com sucesso! Verifique seus downloads.");
-    } catch {
-      toast.error("Erro ao gerar o PDF. Tente novamente.");
-    }
-  }
-
   return (
     <div className="min-h-screen bg-background pb-44">
       {/* Header */}
@@ -174,17 +167,7 @@ function HomePage() {
               {isAdmin && (
                 <div className="flex flex-col sm:flex-row gap-2 justify-center">
                   <button
-                    onClick={() =>
-                      updateMonth((exps) => [
-                        ...exps,
-                        {
-                          id: crypto.randomUUID(),
-                          nome: "",
-                          valor: 0,
-                          tipoDivisao: "igual",
-                        },
-                      ])
-                    }
+                    onClick={addExpense}
                     className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 bg-primary text-primary-foreground font-semibold shadow hover:opacity-90 transition min-h-[44px]"
                   >
                     <Plus className="size-5" /> Adicionar despesa
@@ -209,16 +192,12 @@ function HomePage() {
               readOnly={!isAdmin}
               onChangeName={(name) =>
                 updateMonth((exps) =>
-                  exps.map((x) =>
-                    x.id === e.id ? { ...x, nome: name } : x,
-                  ),
+                  exps.map((x) => (x.id === e.id ? { ...x, nome: name } : x)),
                 )
               }
               onChangeValue={(val) =>
                 updateMonth((exps) =>
-                  exps.map((x) =>
-                    x.id === e.id ? { ...x, valor: val } : x,
-                  ),
+                  exps.map((x) => (x.id === e.id ? { ...x, valor: val } : x)),
                 )
               }
               onRequestDelete={() =>
@@ -231,17 +210,7 @@ function HomePage() {
           {month.expenses.length > 0 && isAdmin && (
             <div className="flex border-t border-border">
               <button
-                onClick={() =>
-                  updateMonth((exps) => [
-                    ...exps,
-                    {
-                      id: crypto.randomUUID(),
-                      nome: "",
-                      valor: 0,
-                      tipoDivisao: "igual",
-                    },
-                  ])
-                }
+                onClick={addExpense}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-primary font-medium hover:bg-accent/20 transition min-h-[44px]"
               >
                 <Plus className="size-5" /> Adicionar
@@ -260,7 +229,7 @@ function HomePage() {
         {store.apartments.length > 0 && <DivisionPreview perApt={perApt} />}
       </main>
 
-      {/* Fixed footer with total + PDF */}
+      {/* Fixed footer with total + add expense */}
       <footer className="fixed bottom-14 inset-x-0 bg-cream-deep/95 backdrop-blur border-t border-border">
         <div className="mx-auto max-w-2xl px-4 py-4 flex items-center gap-3">
           <div className="flex-1 min-w-0">
@@ -271,12 +240,15 @@ function HomePage() {
               {brl(total)}
             </div>
           </div>
-          <button
-            onClick={handleGeneratePDF}
-            className="shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-3.5 bg-primary text-primary-foreground font-semibold shadow hover:opacity-90 transition min-h-[48px] text-base"
-          >
-            <FileDown className="size-5" /> Gerar PDF
-          </button>
+          {isAdmin && (
+            <button
+              onClick={addExpense}
+              aria-label="Adicionar despesa"
+              className="shrink-0 inline-flex items-center justify-center rounded-xl size-12 bg-primary text-primary-foreground shadow hover:opacity-90 transition"
+            >
+              <Plus className="size-6" />
+            </button>
+          )}
         </div>
       </footer>
 
@@ -287,9 +259,7 @@ function HomePage() {
         description={`Tem certeza que deseja excluir "${deleteTarget?.nome || "esta despesa"}"? Esta ação não pode ser desfeita.`}
         onConfirm={() => {
           if (deleteTarget) {
-            updateMonth((exps) =>
-              exps.filter((x) => x.id !== deleteTarget.id),
-            );
+            updateMonth((exps) => exps.filter((x) => x.id !== deleteTarget.id));
           }
           setDeleteTarget(null);
         }}

@@ -1,12 +1,32 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
-import { Plus, Trash2, Download, Upload } from "lucide-react";
-import { useStore, type Store } from "@/lib/condo-store";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Plus,
+  Trash2,
+  Download,
+  Upload,
+  Pencil,
+  Check,
+  FileDown,
+} from "lucide-react";
+import {
+  ensureMonth,
+  formatMonthLabel,
+  monthKey,
+  useStore,
+  type Store,
+} from "@/lib/condo-store";
+import { generateCondoPDF } from "@/lib/generate-pdf";
 import { storeSchema } from "@/lib/store-schema";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { SavedIndicator } from "@/components/saved-indicator";
+import { CurrencyInput } from "@/components/currency-input";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+
+/** Estilo dos inputs de valor (R$) nos Ajustes — mesma aparência dos demais campos do formulário */
+const MONEY_INPUT_CLASS =
+  "w-full bg-background border border-border rounded-xl pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base tabular-nums min-h-[44px]";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({
@@ -32,6 +52,32 @@ function SettingsPage() {
     id: string;
     label: string;
   } | null>(null);
+
+  // Mês atual — usado para gerar o PDF de rateio a partir dos Ajustes
+  const cursor = useMemo(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  }, []);
+  const monthLabel = formatMonthLabel(cursor);
+  const currentMonth = ensureMonth(store, monthKey(cursor));
+
+  async function handleGeneratePDF() {
+    try {
+      await generateCondoPDF({
+        condoName: store.condoName,
+        monthLabel,
+        month: currentMonth,
+        apartments: store.apartments,
+        rules: store.divisionRules,
+        sindico: store.sindico,
+        store,
+        cursor,
+      });
+      toast.success("PDF gerado com sucesso! Verifique seus downloads.");
+    } catch {
+      toast.error("Erro ao gerar o PDF. Tente novamente.");
+    }
+  }
 
   function handleExport() {
     const data = JSON.stringify(store, null, 2);
@@ -89,346 +135,318 @@ function SettingsPage() {
         </div>
       )}
 
-      <main className={`mx-auto max-w-2xl px-4 py-4 space-y-6 ${!isAdmin ? "pointer-events-none opacity-75 select-none" : ""}`}>
+      <main className="mx-auto max-w-2xl px-4 py-4 space-y-6">
         {/* Nome condomínio */}
-        <section className="rounded-2xl bg-card border border-border p-4 shadow-sm">
-          <label
-            htmlFor="condo-name"
-            className="text-xs uppercase tracking-wider font-semibold text-muted-foreground"
-          >
-            Nome do condomínio
-          </label>
-          <input
-            id="condo-name"
-            value={store.condoName}
-            onChange={(e) =>
-              setStore((s) => ({ ...s, condoName: e.target.value }))
-            }
-            className="mt-2 w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base font-medium min-h-[44px]"
-          />
-        </section>
+        <EditableSection title="Nome do condomínio" canEdit={isAdmin}>
+          {() => (
+            <div className="p-4">
+              <input
+                id="condo-name"
+                value={store.condoName}
+                onChange={(e) =>
+                  setStore((s) => ({ ...s, condoName: e.target.value }))
+                }
+                aria-label="Nome do condomínio"
+                className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base font-medium min-h-[44px]"
+              />
+            </div>
+          )}
+        </EditableSection>
 
         {/* Responsável (nome, telefone, email) */}
-        <section className="rounded-2xl bg-card border border-border p-4 shadow-sm space-y-3">
-          <div>
-            <span className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">
-              Responsável / Síndico
-            </span>
-            <p className="text-xs text-muted-foreground mt-1">
-              Dados que aparecerão no rodapé do PDF gerado.
-            </p>
-          </div>
-          <input
-            value={store.responsavel?.nome ?? store.sindico ?? ""}
-            onChange={(e) =>
-              setStore((s) => ({
-                ...s,
-                sindico: e.target.value,
-                responsavel: {
-                  nome: e.target.value,
-                  telefone: s.responsavel?.telefone ?? "",
-                  email: s.responsavel?.email ?? "",
-                },
-              }))
-            }
-            placeholder="Nome completo"
-            aria-label="Nome do responsável"
-            className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base font-medium min-h-[44px]"
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <input
-              type="tel"
-              inputMode="tel"
-              value={store.responsavel?.telefone ?? ""}
-              onChange={(e) =>
-                setStore((s) => ({
-                  ...s,
-                  responsavel: {
-                    nome: s.responsavel?.nome ?? s.sindico ?? "",
-                    telefone: e.target.value,
-                    email: s.responsavel?.email ?? "",
-                  },
-                }))
-              }
-              placeholder="Telefone"
-              aria-label="Telefone do responsável"
-              className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
-            />
-            <input
-              type="email"
-              inputMode="email"
-              value={store.responsavel?.email ?? ""}
-              onChange={(e) =>
-                setStore((s) => ({
-                  ...s,
-                  responsavel: {
-                    nome: s.responsavel?.nome ?? s.sindico ?? "",
-                    telefone: s.responsavel?.telefone ?? "",
-                    email: e.target.value,
-                  },
-                }))
-              }
-              placeholder="Email"
-              aria-label="Email do responsável"
-              className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
-            />
-          </div>
-        </section>
-
-        {/* Valores fixos mensais (Fundo de Reserva, Fundo de Obras, 13º/Férias, Vencimento) */}
-        <section className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
-          <div className="px-4 py-3 bg-secondary/60">
-            <h2 className="font-semibold text-secondary-foreground text-base">
-              Valores fixos do rateio
-            </h2>
-          </div>
-          <div className="p-4 space-y-4">
-            <p className="text-xs text-muted-foreground">
-              Estes valores são adicionados ao rateio mensal além das despesas variáveis.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="space-y-1">
-                <span className="text-sm font-medium text-foreground">
-                  Fundo de Reserva (por unidade)
-                </span>
-                <div className="relative flex items-center">
-                  <span className="absolute left-4 text-muted-foreground text-sm pointer-events-none">R$</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.01"
-                    min="0"
-                    value={store.fundoReserva ?? ""}
-                    onChange={(e) =>
-                      setStore((s) => ({
-                        ...s,
-                        fundoReserva: Number(e.target.value) || 0,
-                      }))
-                    }
-                    placeholder="0,00"
-                    aria-label="Fundo de Reserva por unidade"
-                    className="w-full bg-background border border-border rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base tabular-nums min-h-[44px]"
-                  />
-                </div>
-              </label>
-
-              <label className="space-y-1">
-                <span className="text-sm font-medium text-foreground">
-                  Fundo de Obras (por unidade)
-                </span>
-                <div className="relative flex items-center">
-                  <span className="absolute left-4 text-muted-foreground text-sm pointer-events-none">R$</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.01"
-                    min="0"
-                    value={store.fundoObras ?? ""}
-                    onChange={(e) =>
-                      setStore((s) => ({
-                        ...s,
-                        fundoObras: Number(e.target.value) || 0,
-                      }))
-                    }
-                    placeholder="0,00"
-                    aria-label="Fundo de Obras por unidade"
-                    className="w-full bg-background border border-border rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base tabular-nums min-h-[44px]"
-                  />
-                </div>
-              </label>
-
-              <label className="space-y-1">
-                <span className="text-sm font-medium text-foreground">
-                  13º / Férias / ADM (total)
-                </span>
-                <div className="relative flex items-center">
-                  <span className="absolute left-4 text-muted-foreground text-sm pointer-events-none">R$</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.01"
-                    min="0"
-                    value={store.decimoTerceiroFerias ?? ""}
-                    onChange={(e) =>
-                      setStore((s) => ({
-                        ...s,
-                        decimoTerceiroFerias: Number(e.target.value) || 0,
-                      }))
-                    }
-                    placeholder="0,00"
-                    aria-label="13º Férias ADM total"
-                    className="w-full bg-background border border-border rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base tabular-nums min-h-[44px]"
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  Será dividido igualmente entre as unidades.
-                </span>
-              </label>
-
-              <label className="space-y-1">
-                <span className="text-sm font-medium text-foreground">
-                  Dia de vencimento
-                </span>
+        <EditableSection
+          title="Responsável / Síndico"
+          subtitle="Dados que aparecerão no rodapé do PDF gerado."
+          canEdit={isAdmin}
+        >
+          {() => (
+            <div className="p-4 space-y-3">
+              <input
+                value={store.responsavel?.nome ?? store.sindico ?? ""}
+                onChange={(e) =>
+                  setStore((s) => ({
+                    ...s,
+                    sindico: e.target.value,
+                    responsavel: {
+                      nome: e.target.value,
+                      telefone: s.responsavel?.telefone ?? "",
+                      email: s.responsavel?.email ?? "",
+                    },
+                  }))
+                }
+                placeholder="Nome completo"
+                aria-label="Nome do responsável"
+                className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base font-medium min-h-[44px]"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input
-                  type="number"
-                  inputMode="numeric"
-                  min="1"
-                  max="31"
-                  value={store.vencimentoDia ?? 10}
+                  type="tel"
+                  inputMode="tel"
+                  value={store.responsavel?.telefone ?? ""}
                   onChange={(e) =>
                     setStore((s) => ({
                       ...s,
-                      vencimentoDia: Math.min(31, Math.max(1, Number(e.target.value) || 10)),
+                      responsavel: {
+                        nome: s.responsavel?.nome ?? s.sindico ?? "",
+                        telefone: e.target.value,
+                        email: s.responsavel?.email ?? "",
+                      },
                     }))
                   }
-                  aria-label="Dia de vencimento"
-                  className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base tabular-nums min-h-[44px]"
+                  placeholder="Telefone"
+                  aria-label="Telefone do responsável"
+                  className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
                 />
-                <span className="text-xs text-muted-foreground">
-                  Vencimento no mês seguinte ao de referência.
-                </span>
-              </label>
-            </div>
-          </div>
-        </section>
-
-        {/* Apartamentos */}
-        <section className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
-          <div className="px-4 py-3 bg-secondary/60 flex items-center justify-between">
-            <h2 className="font-semibold text-secondary-foreground text-base">
-              Apartamentos
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              {store.apartments.length} unidades
-            </span>
-          </div>
-
-          <div className="divide-y divide-border">
-            {store.apartments.map((apt) => (
-              <div key={apt.id} className="p-3 space-y-2">
-                <div className="grid grid-cols-[90px_minmax(0,1fr)_44px] gap-2 items-center">
-                  <input
-                    value={apt.numero}
-                    onChange={(e) =>
-                      setStore((s) => ({
-                        ...s,
-                        apartments: s.apartments.map((a) =>
-                          a.id === apt.id
-                            ? { ...a, numero: e.target.value }
-                            : a,
-                        ),
-                      }))
-                    }
-                    placeholder="Nº"
-                    aria-label={`Número do apartamento ${apt.numero || ""}`}
-                    className="w-full bg-background border border-border rounded-xl px-3 py-2.5 font-semibold text-center focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
-                  />
-                  <input
-                    value={apt.morador}
-                    onChange={(e) =>
-                      setStore((s) => ({
-                        ...s,
-                        apartments: s.apartments.map((a) =>
-                          a.id === apt.id
-                            ? { ...a, morador: e.target.value }
-                            : a,
-                        ),
-                      }))
-                    }
-                    placeholder="Proprietário"
-                    aria-label={`Proprietário do apto ${apt.numero || ""}`}
-                    className="w-full bg-background border border-border rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
-                  />
-                  <button
-                    onClick={() =>
-                      setDeleteTarget({
-                        id: apt.id,
-                        label: `${apt.numero || "(sem número)"}${apt.morador ? ` (${apt.morador})` : ""}`,
-                      })
-                    }
-                    className="p-2.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition min-w-[44px] min-h-[44px] flex items-center justify-center"
-                    aria-label={`Remover apartamento ${apt.numero || ""}`}
-                  >
-                    <Trash2 className="size-5" />
-                  </button>
-                </div>
-
-                {/* Inquilino */}
-                <div className="pl-1">
-                  <input
-                    value={apt.inquilino ?? ""}
-                    onChange={(e) =>
-                      setStore((s) => ({
-                        ...s,
-                        apartments: s.apartments.map((a) =>
-                          a.id === apt.id
-                            ? { ...a, inquilino: e.target.value }
-                            : a,
-                        ),
-                      }))
-                    }
-                    placeholder="Inquilino (deixe vazio se não tiver)"
-                    aria-label={`Inquilino do apto ${apt.numero || ""}`}
-                    className="w-full bg-background border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring text-sm min-h-[44px]"
-                  />
-                </div>
-
-                {/* Fração ideal (%) */}
-                <FracaoIdealInput
-                  value={apt.indiceCopasa}
-                  onChange={(val) =>
+                <input
+                  type="email"
+                  inputMode="email"
+                  value={store.responsavel?.email ?? ""}
+                  onChange={(e) =>
                     setStore((s) => ({
                       ...s,
-                      apartments: s.apartments.map((a) =>
-                        a.id === apt.id
-                          ? { ...a, indiceCopasa: val }
-                          : a,
-                      ),
+                      responsavel: {
+                        nome: s.responsavel?.nome ?? s.sindico ?? "",
+                        telefone: s.responsavel?.telefone ?? "",
+                        email: e.target.value,
+                      },
                     }))
                   }
-                  apartamento={apt.numero}
+                  placeholder="Email"
+                  aria-label="Email do responsável"
+                  className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
                 />
               </div>
-            ))}
-          </div>
+            </div>
+          )}
+        </EditableSection>
 
-          <button
-            onClick={() =>
-              setStore((s) => ({
-                ...s,
-                apartments: [
-                  ...s.apartments,
-                  {
-                    id: crypto.randomUUID(),
-                    numero: "",
-                    morador: "",
-                    indiceCopasa: 0,
-                  },
-                ],
-              }))
-            }
-            className="w-full flex items-center justify-center gap-2 px-4 py-3.5 border-t border-border text-primary font-medium hover:bg-accent/20 transition min-h-[44px]"
-          >
-            <Plus className="size-5" /> Adicionar apartamento
-          </button>
+        {/* Valores fixos mensais (Fundo de Reserva, Fundo de Obras, 13º/Férias, Vencimento) */}
+        <EditableSection title="Valores fixos do rateio" canEdit={isAdmin}>
+          {() => (
+            <div className="p-4 space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Estes valores são adicionados ao rateio mensal além das despesas
+                variáveis.
+              </p>
 
-          {/* Total da fração ideal */}
-          {store.apartments.length > 0 && (() => {
-            const totalFracao = store.apartments.reduce((s, a) => s + (a.indiceCopasa || 0), 0);
-            const totalFormatted = totalFracao.toFixed(5);
-            const isValid = Math.abs(totalFracao - 1) < 0.0001;
-            return (
-              <div className={`px-4 py-2.5 border-t border-border flex items-center justify-between text-sm ${isValid ? "text-green-700 bg-green-50" : "text-amber-700 bg-amber-50"}`}>
-                <span className="font-medium">Total fração ideal:</span>
-                <span className="font-bold tabular-nums">
-                  {totalFormatted}{" "}
-                  {isValid ? "✓" : `(deve somar 1.00000)`}
-                </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="space-y-1">
+                  <span className="text-sm font-medium text-foreground">
+                    Fundo de Reserva (por unidade)
+                  </span>
+                  <CurrencyInput
+                    value={store.fundoReserva ?? 0}
+                    onChange={(v) =>
+                      setStore((s) => ({ ...s, fundoReserva: v }))
+                    }
+                    ariaLabel="Fundo de Reserva por unidade"
+                    className={MONEY_INPUT_CLASS}
+                  />
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-sm font-medium text-foreground">
+                    Fundo de Obras (por unidade)
+                  </span>
+                  <CurrencyInput
+                    value={store.fundoObras ?? 0}
+                    onChange={(v) => setStore((s) => ({ ...s, fundoObras: v }))}
+                    ariaLabel="Fundo de Obras por unidade"
+                    className={MONEY_INPUT_CLASS}
+                  />
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-sm font-medium text-foreground">
+                    13º / Férias / ADM (total)
+                  </span>
+                  <CurrencyInput
+                    value={store.decimoTerceiroFerias ?? 0}
+                    onChange={(v) =>
+                      setStore((s) => ({ ...s, decimoTerceiroFerias: v }))
+                    }
+                    ariaLabel="13º Férias ADM total"
+                    className={MONEY_INPUT_CLASS}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    Será dividido igualmente entre as unidades.
+                  </span>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-sm font-medium text-foreground">
+                    Dia de vencimento
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="1"
+                    max="31"
+                    value={store.vencimentoDia ?? 10}
+                    onChange={(e) =>
+                      setStore((s) => ({
+                        ...s,
+                        vencimentoDia: Math.min(
+                          31,
+                          Math.max(1, Number(e.target.value) || 10),
+                        ),
+                      }))
+                    }
+                    aria-label="Dia de vencimento"
+                    className="w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base tabular-nums min-h-[44px]"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    Vencimento no mês seguinte ao de referência.
+                  </span>
+                </label>
               </div>
-            );
-          })()}
-        </section>
+            </div>
+          )}
+        </EditableSection>
+
+        {/* Apartamentos */}
+        <EditableSection
+          title="Apartamentos"
+          canEdit={isAdmin}
+          headerRight={
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {store.apartments.length} unidades
+            </span>
+          }
+        >
+          {() => (
+            <>
+              <div className="divide-y divide-border">
+                {store.apartments.map((apt) => (
+                  <div key={apt.id} className="p-3 space-y-2">
+                    <div className="grid grid-cols-[90px_minmax(0,1fr)_44px] gap-2 items-center">
+                      <input
+                        value={apt.numero}
+                        onChange={(e) =>
+                          setStore((s) => ({
+                            ...s,
+                            apartments: s.apartments.map((a) =>
+                              a.id === apt.id
+                                ? { ...a, numero: e.target.value }
+                                : a,
+                            ),
+                          }))
+                        }
+                        placeholder="Nº"
+                        aria-label={`Número do apartamento ${apt.numero || ""}`}
+                        className="w-full bg-background border border-border rounded-xl px-3 py-2.5 font-semibold text-center focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
+                      />
+                      <input
+                        value={apt.morador}
+                        onChange={(e) =>
+                          setStore((s) => ({
+                            ...s,
+                            apartments: s.apartments.map((a) =>
+                              a.id === apt.id
+                                ? { ...a, morador: e.target.value }
+                                : a,
+                            ),
+                          }))
+                        }
+                        placeholder="Proprietário"
+                        aria-label={`Proprietário do apto ${apt.numero || ""}`}
+                        className="w-full bg-background border border-border rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
+                      />
+                      <button
+                        onClick={() =>
+                          setDeleteTarget({
+                            id: apt.id,
+                            label: `${apt.numero || "(sem número)"}${apt.morador ? ` (${apt.morador})` : ""}`,
+                          })
+                        }
+                        className="p-2.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        aria-label={`Remover apartamento ${apt.numero || ""}`}
+                      >
+                        <Trash2 className="size-5" />
+                      </button>
+                    </div>
+
+                    {/* Inquilino */}
+                    <div className="pl-1">
+                      <input
+                        value={apt.inquilino ?? ""}
+                        onChange={(e) =>
+                          setStore((s) => ({
+                            ...s,
+                            apartments: s.apartments.map((a) =>
+                              a.id === apt.id
+                                ? { ...a, inquilino: e.target.value }
+                                : a,
+                            ),
+                          }))
+                        }
+                        placeholder="Inquilino (deixe vazio se não tiver)"
+                        aria-label={`Inquilino do apto ${apt.numero || ""}`}
+                        className="w-full bg-background border border-border rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring text-sm min-h-[44px]"
+                      />
+                    </div>
+
+                    {/* Fração ideal (%) */}
+                    <FracaoIdealInput
+                      value={apt.indiceCopasa}
+                      onChange={(val) =>
+                        setStore((s) => ({
+                          ...s,
+                          apartments: s.apartments.map((a) =>
+                            a.id === apt.id ? { ...a, indiceCopasa: val } : a,
+                          ),
+                        }))
+                      }
+                      apartamento={apt.numero}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={() =>
+                  setStore((s) => ({
+                    ...s,
+                    apartments: [
+                      ...s.apartments,
+                      {
+                        id: crypto.randomUUID(),
+                        numero: "",
+                        morador: "",
+                        indiceCopasa: 0,
+                      },
+                    ],
+                  }))
+                }
+                className="w-full flex items-center justify-center gap-2 px-4 py-3.5 border-t border-border text-primary font-medium hover:bg-accent/20 transition min-h-[44px]"
+              >
+                <Plus className="size-5" /> Adicionar apartamento
+              </button>
+
+              {/* Total da fração ideal */}
+              {store.apartments.length > 0 &&
+                (() => {
+                  const totalFracao = store.apartments.reduce(
+                    (s, a) => s + (a.indiceCopasa || 0),
+                    0,
+                  );
+                  const totalFormatted = totalFracao.toFixed(5);
+                  const isValid = Math.abs(totalFracao - 1) < 0.0001;
+                  return (
+                    <div
+                      className={`px-4 py-2.5 border-t border-border flex items-center justify-between text-sm ${isValid ? "text-green-700 bg-green-50" : "text-amber-700 bg-amber-50"}`}
+                    >
+                      <span className="font-medium">Total fração ideal:</span>
+                      <span className="font-bold tabular-nums">
+                        {totalFormatted}{" "}
+                        {isValid ? "✓" : `(deve somar 1.00000)`}
+                      </span>
+                    </div>
+                  );
+                })()}
+            </>
+          )}
+        </EditableSection>
 
         {/* Backup: Export/Import */}
         <section className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
@@ -468,6 +486,29 @@ function SettingsPage() {
         </section>
       </main>
 
+      {/* PDF de rateio — sempre disponível, independente do modo edição */}
+      <div className="mx-auto max-w-2xl px-4 pb-4">
+        <section className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+          <div className="px-4 py-3 bg-secondary/60">
+            <h2 className="font-semibold text-secondary-foreground text-base">
+              Relatório de rateio
+            </h2>
+          </div>
+          <div className="p-4 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Gera o PDF de rateio do mês atual ({monthLabel}) com as despesas e
+              os valores configurados acima.
+            </p>
+            <button
+              onClick={handleGeneratePDF}
+              className="w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 bg-primary text-primary-foreground font-semibold hover:opacity-90 transition min-h-[44px]"
+            >
+              <FileDown className="size-5" /> Gerar PDF
+            </button>
+          </div>
+        </section>
+      </div>
+
       {/* Single delete confirmation dialog */}
       <ConfirmDeleteDialog
         open={deleteTarget !== null}
@@ -485,6 +526,65 @@ function SettingsPage() {
         onCancel={() => setDeleteTarget(null)}
       />
     </div>
+  );
+}
+
+/**
+ * Seção de ajustes com modo edição próprio (ícone de lápis + salvar), no mesmo
+ * padrão das linhas de despesa da tela inicial. Cada seção que pode conter dados
+ * tem seu próprio botão — não há um modo edição global.
+ */
+function EditableSection({
+  title,
+  subtitle,
+  headerRight,
+  canEdit,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  headerRight?: ReactNode;
+  canEdit: boolean;
+  children: (editing: boolean) => ReactNode;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  return (
+    <section className="rounded-2xl bg-card border border-border shadow-sm overflow-hidden">
+      <div className="px-4 py-3 bg-secondary/60 flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <h2 className="font-semibold text-secondary-foreground text-base">
+            {title}
+          </h2>
+          {subtitle && (
+            <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+          )}
+        </div>
+        {headerRight}
+        {canEdit &&
+          (editing ? (
+            <button
+              onClick={() => setEditing(false)}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition min-h-[36px]"
+            >
+              <Check className="size-4" /> Salvar
+            </button>
+          ) : (
+            <button
+              onClick={() => setEditing(true)}
+              aria-label={`Editar: ${title}`}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 transition min-h-[36px]"
+            >
+              <Pencil className="size-4" /> Editar
+            </button>
+          ))}
+      </div>
+      <div
+        className={editing ? "" : "pointer-events-none opacity-75 select-none"}
+      >
+        {children(editing)}
+      </div>
+    </section>
   );
 }
 
