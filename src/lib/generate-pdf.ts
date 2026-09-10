@@ -9,7 +9,7 @@ import { getTipoDivisao } from "./condo-store";
 
 // --- Types ---
 
-type Cobranca = {
+export type Cobranca = {
   tipo: "Proprietário" | "Inquilino";
   nomePagador: string;
   copasa: number;
@@ -20,13 +20,13 @@ type Cobranca = {
   total: number;
 };
 
-type UnidadeCobranca = {
+export type UnidadeCobranca = {
   apartamento: string;
   fracaoIdeal: number;
   cobrancas: Cobranca[];
 };
 
-type DadosPdfRateio = {
+export type DadosPdfRateio = {
   condominio: { nome: string };
   responsavel?: Responsavel;
   referencia: {
@@ -391,16 +391,18 @@ export async function generateRateioPDF(opts: {
     cw: number,
     pw: number,
   ): void {
-    // Column positions (x start for each column)
+    // Column positions.
+    // Tipo/AP são alinhados à esquerda; as colunas numéricas são alinhadas
+    // à direita neste x, espaçadas o suficiente para nunca se sobreporem.
     const cols = {
       tipo: mx,
-      ap: mx + 72,
-      fracao: mx + 105,
-      copasa: mx + 165,
-      rateio: mx + 225,
-      reserva: mx + 290,
-      decimo: mx + 355,
-      obras: mx + 415,
+      ap: mx + 70,
+      fracao: mx + 150,
+      copasa: mx + 211,
+      rateio: mx + 272,
+      reserva: mx + 333,
+      decimo: mx + 394,
+      obras: mx + 455,
       total: pw - mx,
     };
 
@@ -412,13 +414,13 @@ export async function generateRateioPDF(opts: {
     d.setFillColor(...FUNDO_HEADER_TABELA);
     d.rect(mx, y - 4, cw, headerH, "F");
     d.setFont("helvetica", "bold");
-    d.setFontSize(8.5);
+    d.setFontSize(8);
     d.setTextColor(80, 80, 80);
 
     const headerY = y + 8;
     d.text("Tipo", cols.tipo + 2, headerY);
     d.text("AP", cols.ap, headerY);
-    d.text("Fração", cols.fracao, headerY);
+    d.text("Fração", cols.fracao, headerY, { align: "right" });
     d.text("COPASA", cols.copasa, headerY, { align: "right" });
     d.text("Rat. Mensal", cols.rateio, headerY, { align: "right" });
     d.text("F. Reserva", cols.reserva, headerY, { align: "right" });
@@ -443,7 +445,7 @@ export async function generateRateioPDF(opts: {
         }
 
         const rowY = y + 10;
-        d.setFontSize(8.5);
+        d.setFontSize(8);
 
         // Tipo (italic)
         d.setFont("helvetica", "italic");
@@ -462,7 +464,9 @@ export async function generateRateioPDF(opts: {
           cob.fundoObras > 0;
 
         if (!isSoFundoObras) {
-          d.text(formatFracao(unidade.fracaoIdeal), cols.fracao, rowY);
+          d.text(formatFracao(unidade.fracaoIdeal), cols.fracao, rowY, {
+            align: "right",
+          });
           // COPASA
           d.text(brl(cob.copasa), cols.copasa, rowY, { align: "right" });
         }

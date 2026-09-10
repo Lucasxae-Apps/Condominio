@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Pencil, Trash2, Check } from "lucide-react";
+import { Pencil, Trash2, Check, X } from "lucide-react";
 import { CurrencyInput } from "@/components/currency-input";
+import { getTipoDivisao } from "@/lib/condo-store";
 import type { DivisionRules, Expense } from "@/lib/condo-store";
 
 export function ExpenseRow({
@@ -10,6 +11,7 @@ export function ExpenseRow({
   onChangeName,
   onChangeValue,
   onRequestDelete,
+  onCancelNew,
 }: {
   expense: Expense;
   rules?: DivisionRules;
@@ -17,12 +19,14 @@ export function ExpenseRow({
   onChangeName: (name: string) => void;
   onChangeValue: (value: number) => void;
   onRequestDelete: () => void;
+  onCancelNew?: () => void;
 }) {
+  const isCopasa = getTipoDivisao(expense, rules) === "copasa";
+
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(expense.nome);
   const [draftValue, setDraftValue] = useState(expense.valor);
 
-  // Novo registro (sem nome) já abre em modo edição
   const isNew = !expense.nome.trim() && expense.valor === 0;
   const showEditing = (editing || isNew) && !readOnly;
 
@@ -35,6 +39,16 @@ export function ExpenseRow({
   function save() {
     onChangeName(draftName);
     onChangeValue(draftValue);
+    setEditing(false);
+  }
+
+  function cancel() {
+    if (isNew) {
+      onCancelNew?.();
+      return;
+    }
+    setDraftName(expense.nome);
+    setDraftValue(expense.valor);
     setEditing(false);
   }
 
@@ -53,20 +67,31 @@ export function ExpenseRow({
           <div className="flex-1">
             <CurrencyInput value={draftValue} onChange={setDraftValue} />
           </div>
+          {!isNew && (
+            <button
+              onClick={onRequestDelete}
+              aria-label={`Remover despesa ${draftName || ""}`}
+              className="p-2.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+            >
+              <Trash2 className="size-5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex gap-2">
           <button
-            onClick={onRequestDelete}
-            aria-label={`Remover despesa ${draftName || ""}`}
-            className="p-2.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition min-w-[44px] min-h-[44px] flex items-center justify-center"
+            onClick={cancel}
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 bg-secondary text-secondary-foreground font-medium hover:bg-accent/30 transition min-h-[44px]"
           >
-            <Trash2 className="size-5" />
+            <X className="size-5" /> Cancelar
+          </button>
+          <button
+            onClick={save}
+            className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 bg-primary text-primary-foreground font-semibold hover:opacity-90 transition min-h-[44px]"
+          >
+            <Check className="size-5" /> Salvar
           </button>
         </div>
-        <button
-          onClick={save}
-          className="w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 bg-primary text-primary-foreground font-semibold hover:opacity-90 transition min-h-[44px]"
-        >
-          <Check className="size-5" /> Salvar despesa
-        </button>
       </div>
     );
   }
@@ -81,10 +106,15 @@ export function ExpenseRow({
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1 px-3 py-2.5 border-t border-border">
-      <div className="min-w-0">
-        <span className="block text-base font-medium truncate px-2">
+      <div className="min-w-0 px-2">
+        <span className="block text-base font-medium truncate">
           {expense.nome || "(sem nome)"}
         </span>
+        {isCopasa && (
+          <span className="block text-xs text-muted-foreground">
+            Rateada por fração ideal
+          </span>
+        )}
       </div>
       <span className="text-base font-semibold tabular-nums text-right px-2 whitespace-nowrap">
         {formattedValue}

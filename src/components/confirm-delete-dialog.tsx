@@ -15,12 +15,18 @@ export function ConfirmDeleteDialog({
   description,
   onConfirm,
   onCancel,
+  confirmLabel = "Excluir",
+  destructive = true,
 }: {
   open: boolean;
   title: string;
   description: string;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Texto do botão de confirmação (padrão: "Excluir") */
+  confirmLabel?: string;
+  /** Aplica o estilo vermelho de ação destrutiva (padrão: true) */
+  destructive?: boolean;
 }) {
   return (
     <AlertDialog open={open} onOpenChange={(v) => !v && onCancel()}>
@@ -33,9 +39,13 @@ export function ConfirmDeleteDialog({
           <AlertDialogCancel onClick={onCancel}>Cancelar</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className={
+              destructive
+                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                : undefined
+            }
           >
-            Excluir
+            {confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -9,12 +9,13 @@ import {
   useStore,
   type Expense,
 } from "@/lib/condo-store";
+import { computePdfData } from "@/lib/generate-pdf";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
 import { SavedIndicator } from "@/components/saved-indicator";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { ExpenseRow } from "@/components/expense-row";
-import { DivisionPreview } from "@/components/division-preview";
+import { RateioBreakdown } from "@/components/rateio-breakdown";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 
 export const Route = createFileRoute("/")({
@@ -60,10 +61,16 @@ function HomePage() {
     cursor.getFullYear() === now.getFullYear() &&
     cursor.getMonth() === now.getMonth();
 
-  const { total, perApt } = useMemo(
+  const { total } = useMemo(
     () => computeDivision(month, store.apartments, store.divisionRules),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [month.expenses, store.apartments, store.divisionRules],
+  );
+
+  const pdfData = useMemo(
+    () => computePdfData({ store, month, cursor }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [store, month.expenses, cursor],
   );
 
   function updateMonth(updater: (expenses: Expense[]) => Expense[]) {
@@ -98,7 +105,9 @@ function HomePage() {
     const prevMonth = ensureMonth(store, prevKey);
 
     if (prevMonth.expenses.length === 0) {
-      toast.info("O mês anterior não possui despesas para copiar.");
+      toast.info(
+        `Não há despesas em ${formatMonthLabel(prevDate)} para trazer para este mês.`,
+      );
       return;
     }
 
@@ -116,7 +125,9 @@ function HomePage() {
       },
     }));
 
-    toast.success("Despesas copiadas do mês anterior (valores zerados).");
+    toast.success(
+      `${newExpenses.length} despesa(s) trazidas de ${formatMonthLabel(prevDate)}. Agora é só preencher os valores.`,
+    );
   }, [cursor, store, key, setStore]);
 
   function copyPreviousMonth() {
@@ -203,30 +214,37 @@ function HomePage() {
               onRequestDelete={() =>
                 setDeleteTarget({ id: e.id, nome: e.nome })
               }
+              onCancelNew={() =>
+                updateMonth((exps) => exps.filter((x) => x.id !== e.id))
+              }
             />
           ))}
 
-          {/* Add expense + copy buttons */}
+          {/* Add expense + copy buttons (ícones) */}
           {month.expenses.length > 0 && isAdmin && (
-            <div className="flex border-t border-border">
-              <button
-                onClick={addExpense}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-primary font-medium hover:bg-accent/20 transition min-h-[44px]"
-              >
-                <Plus className="size-5" /> Adicionar
-              </button>
+            <div className="flex items-center justify-end gap-1 border-t border-border px-2 py-2">
               <button
                 onClick={copyPreviousMonth}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-secondary-foreground font-medium hover:bg-accent/20 transition border-l border-border min-h-[44px]"
+                aria-label="Copiar despesas do mês anterior"
+                title="Copiar mês anterior"
+                className="inline-flex items-center justify-center rounded-lg size-10 text-muted-foreground hover:text-foreground hover:bg-accent/20 transition"
               >
-                <Copy className="size-5" /> Copiar mês anterior
+                <Copy className="size-5" />
+              </button>
+              <button
+                onClick={addExpense}
+                aria-label="Adicionar despesa"
+                title="Adicionar despesa"
+                className="inline-flex items-center justify-center rounded-lg size-10 text-primary hover:bg-accent/20 transition"
+              >
+                <Plus className="size-5" />
               </button>
             </div>
           )}
         </div>
 
-        {/* Preview divisão */}
-        {store.apartments.length > 0 && <DivisionPreview perApt={perApt} />}
+        {/* Rateio detalhado por unidade */}
+        {store.apartments.length > 0 && <RateioBreakdown data={pdfData} />}
       </main>
 
       {/* Fixed footer with total + add expense */}
@@ -269,8 +287,10 @@ function HomePage() {
       {/* Confirm copy over existing data */}
       <ConfirmDeleteDialog
         open={confirmCopy}
-        title="Substituir despesas?"
-        description="Este mês já possui despesas cadastradas. Ao copiar do mês anterior, as despesas atuais serão substituídas. Deseja continuar?"
+        title="Trazer despesas do mês anterior?"
+        description="Isso apaga as despesas já cadastradas neste mês e coloca no lugar a mesma lista do mês anterior, com os valores zerados para você preencher."
+        confirmLabel="Substituir"
+        destructive={false}
         onConfirm={() => {
           setConfirmCopy(false);
           doCopy();

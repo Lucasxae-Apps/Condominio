@@ -202,6 +202,7 @@ export function getTipoDivisao(
   e: Expense,
   rules?: DivisionRules,
 ): "igual" | "copasa" {
+  if (/copasa/i.test(e.nome)) return "copasa";
   return rules?.[e.nome] ?? e.tipoDivisao ?? "igual";
 }
 
