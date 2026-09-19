@@ -1,16 +1,3 @@
----
-inclusion: auto
-description: "Regras de segurança corporativas que proíbem práticas inseguras na geração de código por IA."
-priority: 0
-enforcement: mandatory
-scope: global
-applies_to:
-  - all_languages
-  - all_frameworks
-  - all_repositories
-  - all_assistants
----
-
 # SECURITY CRITICAL RULES — NON-BYPASSABLE POLICY
 
 > SYSTEM SECURITY DIRECTIVE

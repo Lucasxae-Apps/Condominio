@@ -16,6 +16,14 @@ const LINHAS: Array<{ label: string; key: keyof Cobranca }> = [
   { label: "13º / Férias / ADM", key: "decimoTerceiroFeriasAdm" },
 ];
 
+/** Texto pequeno exibido abaixo de alguns rótulos, igual ao que a COPASA já tem. */
+const SUBTITULOS: Partial<Record<keyof Cobranca, string>> = {
+  copasa: "Rateada por fração ideal",
+  fundoReserva: "fundo de reserva",
+  fundoObras: "fundo de obras",
+  decimoTerceiroFeriasAdm: "13 férias",
+};
+
 function CobrancaCard({
   unidade,
   cobranca,
@@ -54,7 +62,14 @@ function CobrancaCard({
       <dl className="space-y-1">
         {linhas.map(({ label, key }) => (
           <div key={key} className="flex items-baseline justify-between gap-3">
-            <dt className="text-sm text-muted-foreground">{label}</dt>
+            <dt className="text-sm text-muted-foreground">
+              {label}
+              {SUBTITULOS[key] && (
+                <span className="block text-xs text-muted-foreground/70">
+                  {SUBTITULOS[key]}
+                </span>
+              )}
+            </dt>
             <dd className="text-sm tabular-nums">
               {brl(cobranca[key] as number)}
             </dd>
@@ -78,33 +93,23 @@ export function RateioBreakdown({ data }: { data: DadosPdfRateio }) {
 
   const totalCobrancas = unidades.reduce((s, u) => s + u.cobrancas.length, 0);
 
-  const resumo: Array<{ label: string; valor: number }> = [
-    { label: "Rateio Mensal", valor: totais.rateioMensal },
-    { label: "COPASA", valor: totais.copasa },
-    { label: "Fundo Reserva", valor: totais.fundoReserva },
-    { label: "Fundo de Obras", valor: totais.fundoObras },
-    { label: "13º / Férias / ADM", valor: totais.decimoTerceiroFeriasAdm },
-  ].filter((r) => r.valor !== 0);
+  const resumoBase: Array<{ label: string; key: keyof Cobranca; valor: number }> = [
+    { label: "Rateio Mensal", key: "rateioMensal", valor: totais.rateioMensal },
+    { label: "COPASA", key: "copasa", valor: totais.copasa },
+    { label: "Fundo Reserva", key: "fundoReserva", valor: totais.fundoReserva },
+    { label: "Fundo de Obras", key: "fundoObras", valor: totais.fundoObras },
+    { label: "13º / Férias / ADM", key: "decimoTerceiroFeriasAdm", valor: totais.decimoTerceiroFeriasAdm },
+  ];
+  const resumo = resumoBase.filter((r) => r.valor !== 0);
 
   return (
     <div className="mt-5 rounded-2xl bg-card border border-border overflow-hidden shadow-sm">
-      {/* Cabeçalho: total a ratear + ação de PDF */}
-      <div className="px-4 py-4 bg-primary text-primary-foreground">
-        <div className="text-xs font-semibold uppercase tracking-wider opacity-80">
-          Total a ratear
-        </div>
-        <div className="text-3xl font-extrabold tabular-nums">
-          {brl(totais.total)}
-        </div>
-        <div className="text-sm opacity-90 mt-0.5">
-          distribuído entre {unidades.length}{" "}
-          {unidades.length === 1 ? "unidade" : "unidades"} · {totalCobrancas}{" "}
-          {totalCobrancas === 1 ? "cobrança" : "cobranças"}
-        </div>
-      </div>
-
-      <div className="px-4 py-3 bg-secondary/60 text-xs font-semibold uppercase tracking-wider text-secondary-foreground">
-        Rateio por unidade
+      <div className="px-4 py-3 bg-secondary/60 text-xs font-semibold uppercase tracking-wider text-secondary-foreground flex items-baseline justify-between gap-2">
+        <span>Rateio por unidade</span>
+        <span className="normal-case font-medium text-muted-foreground">
+          {totalCobrancas} {totalCobrancas === 1 ? "cobrança" : "cobranças"} ·{" "}
+          {unidades.length} {unidades.length === 1 ? "unidade" : "unidades"}
+        </span>
       </div>
 
       {unidades.flatMap((unidade) =>
@@ -129,7 +134,14 @@ export function RateioBreakdown({ data }: { data: DadosPdfRateio }) {
                 key={r.label}
                 className="flex items-baseline justify-between gap-3"
               >
-                <dt className="text-sm text-muted-foreground">{r.label}</dt>
+                <dt className="text-sm text-muted-foreground">
+                  {r.label}
+                  {SUBTITULOS[r.key] && (
+                    <span className="block text-xs text-muted-foreground/70">
+                      {SUBTITULOS[r.key]}
+                    </span>
+                  )}
+                </dt>
                 <dd className="text-sm tabular-nums">{brl(r.valor)}</dd>
               </div>
             ))}
