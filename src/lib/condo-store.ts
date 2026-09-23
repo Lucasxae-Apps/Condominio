@@ -113,6 +113,37 @@ function loadFromStorage(): Store {
   }
 }
 
+// --- Pure utility functions (needed before store singleton init) ---
+
+export function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+const MAX_MONTHS_RETENTION = 12;
+
+/**
+ * Mantém no máximo os últimos 12 meses (mês de referência + 11 anteriores).
+ * Meses mais antigos são descartados para limitar o histórico persistido.
+ */
+export function pruneOldMonths(store: Store, referenceDate: Date = new Date()): Store {
+  const keptKeys = new Set<string>();
+  for (let i = 0; i < MAX_MONTHS_RETENTION; i++) {
+    const d = new Date(referenceDate.getFullYear(), referenceDate.getMonth() - i, 1);
+    keptKeys.add(monthKey(d));
+  }
+
+  const months: Record<string, MonthData> = {};
+  for (const [k, v] of Object.entries(store.months)) {
+    if (keptKeys.has(k)) months[k] = v;
+  }
+
+  if (Object.keys(months).length === Object.keys(store.months).length) {
+    return store;
+  }
+
+  return { ...store, months };
+}
+
 // --- Store singleton ---
 
 let current: Store = defaultStore;
@@ -120,7 +151,7 @@ let listeners: Set<() => void> = new Set();
 
 // Initialize on module load (client only)
 if (typeof window !== "undefined") {
-  current = loadFromStorage();
+  current = pruneOldMonths(loadFromStorage());
 }
 
 function getSnapshot(): Store {
@@ -139,7 +170,7 @@ function subscribe(listener: () => void): () => void {
 }
 
 export function setStore(updater: (s: Store) => Store) {
-  const next = updater(current);
+  const next = pruneOldMonths(updater(current));
   current = next;
   persistToStorage(next);
   listeners.forEach((l) => l());
@@ -150,8 +181,8 @@ export function setStore(updater: (s: Store) => Store) {
  * Also persists to localStorage.
  */
 export function replaceStore(s: Store) {
-  current = s;
-  localStorage.setItem(KEY, JSON.stringify(s));
+  current = pruneOldMonths(s);
+  localStorage.setItem(KEY, JSON.stringify(current));
   lastSavedAt = Date.now();
   listeners.forEach((l) => l());
   savedListeners.forEach((l) => l());
@@ -186,8 +217,9 @@ export function useStore() {
 
 // --- Pure utility functions ---
 
-export function monthKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+/** Lista as chaves de mês ("YYYY-MM") com dados, mais recente primeiro. */
+export function listAvailableMonthKeys(store: Store): string[] {
+  return Object.keys(store.months).sort((a, b) => (a < b ? 1 : -1));
 }
 
 export function ensureMonth(store: Store, key: string): MonthData {

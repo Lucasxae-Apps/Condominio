@@ -53,12 +53,22 @@ function SettingsPage() {
     label: string;
   } | null>(null);
 
-  // Mês atual — usado para gerar o PDF de rateio a partir dos Ajustes
-  const cursor = useMemo(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1);
+  // Últimos 12 meses disponíveis para exportação do PDF (mais recente primeiro)
+  const exportableMonths = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 12 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      return { key: monthKey(d), label: formatMonthLabel(d), date: d };
+    });
   }, []);
-  const monthLabel = formatMonthLabel(cursor);
+
+  const [selectedMonthKey, setSelectedMonthKey] = useState(exportableMonths[0].key);
+  const selectedMonth = useMemo(
+    () => exportableMonths.find((m) => m.key === selectedMonthKey) ?? exportableMonths[0],
+    [exportableMonths, selectedMonthKey],
+  );
+  const cursor = selectedMonth.date;
+  const monthLabel = selectedMonth.label;
   const currentMonth = ensureMonth(store, monthKey(cursor));
 
   async function handleGeneratePDF() {
@@ -496,14 +506,30 @@ function SettingsPage() {
           </div>
           <div className="p-4 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Gera o PDF de rateio do mês atual ({monthLabel}) com as despesas e
-              os valores configurados acima.
+              Escolha o mês e gere o PDF de rateio com as despesas e os
+              valores configurados acima.
             </p>
+            <label className="block">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Mês de referência
+              </span>
+              <select
+                value={selectedMonthKey}
+                onChange={(e) => setSelectedMonthKey(e.target.value)}
+                className="mt-1 w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base capitalize min-h-[44px]"
+              >
+                {exportableMonths.map((m) => (
+                  <option key={m.key} value={m.key} className="capitalize">
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               onClick={handleGeneratePDF}
               className="w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 bg-primary text-primary-foreground font-semibold hover:opacity-90 transition min-h-[44px]"
             >
-              <FileDown className="size-5" /> Gerar PDF
+              <FileDown className="size-5" /> Gerar PDF de {monthLabel}
             </button>
           </div>
         </section>
