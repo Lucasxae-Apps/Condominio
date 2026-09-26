@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useCallback } from "react";
 import { Plus, Copy, Receipt } from "lucide-react";
 import {
-  computeDivision,
   ensureMonth,
   formatMonthLabel,
   monthKey,
@@ -61,17 +60,13 @@ function HomePage() {
     cursor.getFullYear() === now.getFullYear() &&
     cursor.getMonth() === now.getMonth();
 
-  const { total } = useMemo(
-    () => computeDivision(month, store.apartments, store.divisionRules),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [month.expenses, store.apartments, store.divisionRules],
-  );
-
   const pdfData = useMemo(
     () => computePdfData({ store, month, cursor }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [store, month.expenses, cursor],
   );
+
+  const total = pdfData.totais.total;
 
   function updateMonth(updater: (expenses: Expense[]) => Expense[]) {
     setStore((s) => ({

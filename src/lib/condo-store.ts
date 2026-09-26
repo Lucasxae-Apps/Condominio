@@ -38,7 +38,7 @@ export type Store = {
   vencimentoDia?: number; // dia do mês para vencimento (ex: 10)
   fundoReserva?: number; // valor fixo por unidade
   fundoObras?: number; // valor fixo por unidade (cobrado do proprietário)
-  decimoTerceiroFerias?: number; // valor total a ser dividido igualmente
+  decimoTerceiroFerias?: number; // valor fixo por unidade
 };
 
 const KEY = "condo-store-v1";
@@ -236,6 +236,30 @@ export function getTipoDivisao(
 ): "igual" | "copasa" {
   if (/copasa/i.test(e.nome)) return "copasa";
   return rules?.[e.nome] ?? e.tipoDivisao ?? "igual";
+}
+
+export type CategoriaRateio =
+  | "copasa"
+  | "fundoObras"
+  | "fundoReserva"
+  | "decimoTerceiro"
+  | "rateioMensal";
+
+/**
+ * Identifica pelo nome se a despesa é um dos itens fixos (Copasa, Fundo de
+ * Obras, Fundo de Reserva, 13º/Férias/ADM), que têm regra de divisão própria
+ * e não entram no "rateio mensal" das despesas comuns.
+ */
+export function categorizeExpense(
+  e: Expense,
+  rules?: DivisionRules,
+): CategoriaRateio {
+  if (getTipoDivisao(e, rules) === "copasa") return "copasa";
+  const nome = e.nome;
+  if (/fundo.*obras?/i.test(nome)) return "fundoObras";
+  if (/fundo.*reserva/i.test(nome)) return "fundoReserva";
+  if (/f[ée]rias|d[ée]cimo.*terceiro/i.test(nome)) return "decimoTerceiro";
+  return "rateioMensal";
 }
 
 export function listExpenseNames(store: Store): string[] {

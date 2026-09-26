@@ -268,19 +268,16 @@ function SettingsPage() {
 
                 <label className="space-y-1">
                   <span className="text-sm font-medium text-foreground">
-                    13º / Férias / ADM (total)
+                    13º / Férias / ADM (por unidade)
                   </span>
                   <CurrencyInput
                     value={store.decimoTerceiroFerias ?? 0}
                     onChange={(v) =>
                       setStore((s) => ({ ...s, decimoTerceiroFerias: v }))
                     }
-                    ariaLabel="13º Férias ADM total"
+                    ariaLabel="13º Férias ADM por unidade"
                     className={MONEY_INPUT_CLASS}
                   />
-                  <span className="text-xs text-muted-foreground">
-                    Será dividido igualmente entre as unidades.
-                  </span>
                 </label>
 
                 <label className="space-y-1">

@@ -16,14 +16,6 @@ const LINHAS: Array<{ label: string; key: keyof Cobranca }> = [
   { label: "13º / Férias / ADM", key: "decimoTerceiroFeriasAdm" },
 ];
 
-/** Texto pequeno exibido abaixo de alguns rótulos, igual ao que a COPASA já tem. */
-const SUBTITULOS: Partial<Record<keyof Cobranca, string>> = {
-  copasa: "Rateada por fração ideal",
-  fundoReserva: "fundo de reserva",
-  fundoObras: "fundo de obras",
-  decimoTerceiroFeriasAdm: "13 férias",
-};
-
 function CobrancaCard({
   unidade,
   cobranca,
@@ -62,14 +54,7 @@ function CobrancaCard({
       <dl className="space-y-1">
         {linhas.map(({ label, key }) => (
           <div key={key} className="flex items-baseline justify-between gap-3">
-            <dt className="text-sm text-muted-foreground">
-              {label}
-              {SUBTITULOS[key] && (
-                <span className="block text-xs text-muted-foreground/70">
-                  {SUBTITULOS[key]}
-                </span>
-              )}
-            </dt>
+            <dt className="text-sm text-muted-foreground">{label}</dt>
             <dd className="text-sm tabular-nums">
               {brl(cobranca[key] as number)}
             </dd>
@@ -134,14 +119,7 @@ export function RateioBreakdown({ data }: { data: DadosPdfRateio }) {
                 key={r.label}
                 className="flex items-baseline justify-between gap-3"
               >
-                <dt className="text-sm text-muted-foreground">
-                  {r.label}
-                  {SUBTITULOS[r.key] && (
-                    <span className="block text-xs text-muted-foreground/70">
-                      {SUBTITULOS[r.key]}
-                    </span>
-                  )}
-                </dt>
+                <dt className="text-sm text-muted-foreground">{r.label}</dt>
                 <dd className="text-sm tabular-nums">{brl(r.valor)}</dd>
               </div>
             ))}

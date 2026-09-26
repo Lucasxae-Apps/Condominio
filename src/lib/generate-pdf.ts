@@ -5,7 +5,7 @@
  * cards individuais por cobrança, bloco-resumo final e rodapé de contato.
  */
 import type { Apartment, DivisionRules, MonthData, Responsavel, Store } from "./condo-store";
-import { getTipoDivisao } from "./condo-store";
+import { categorizeExpense } from "./condo-store";
 
 // --- Types ---
 
@@ -98,23 +98,46 @@ export function computePdfData(opts: {
   // Compute totals for each expense category
   const filteredExpenses = month.expenses.filter((e) => e.nome.trim());
 
-  // "Rateio Mensal" = sum of all expenses that are NOT copasa
-  // (the non-copasa expenses become the "Rateio Mensal" line item)
+  // "Rateio Mensal" = sum of all expenses that are NOT Copasa, Fundo de
+  // Obras, Fundo de Reserva ou 13º/Férias/ADM (essas têm regra própria e são
+  // identificadas pelo nome da despesa, como já acontece com Copasa).
   let totalRateioMensal = 0;
   let totalCopasa = 0;
+  let totalFundoReservaExpense = 0;
+  let totalFundoObrasExpense = 0;
+  let totalDecimoTerceiroExpense = 0;
 
   for (const e of filteredExpenses) {
     const valor = Number(e.valor) || 0;
-    if (getTipoDivisao(e, rules) === "copasa") {
-      totalCopasa += valor;
-    } else {
-      totalRateioMensal += valor;
+    switch (categorizeExpense(e, rules)) {
+      case "copasa":
+        totalCopasa += valor;
+        break;
+      case "fundoObras":
+        totalFundoObrasExpense += valor;
+        break;
+      case "fundoReserva":
+        totalFundoReservaExpense += valor;
+        break;
+      case "decimoTerceiro":
+        totalDecimoTerceiroExpense += valor;
+        break;
+      default:
+        totalRateioMensal += valor;
     }
   }
 
-  const totalFundoReserva = (store.fundoReserva ?? 0) * n;
-  const totalFundoObras = (store.fundoObras ?? 0) * n;
-  const totalDecimoTerceiro = store.decimoTerceiroFerias ?? 0;
+  // Se o valor do mês já foi lançado como despesa (nome reconhecido), usa
+  // esse valor real. Caso contrário, cai para o valor fixo por unidade
+  // configurado em Configurações. Nunca soma os dois (evita duplicação).
+  const totalFundoReserva =
+    totalFundoReservaExpense > 0 ? totalFundoReservaExpense : (store.fundoReserva ?? 0) * n;
+  const totalFundoObras =
+    totalFundoObrasExpense > 0 ? totalFundoObrasExpense : (store.fundoObras ?? 0) * n;
+  const totalDecimoTerceiro =
+    totalDecimoTerceiroExpense > 0
+      ? totalDecimoTerceiroExpense
+      : (store.decimoTerceiroFerias ?? 0) * n;
 
   const totalGeral =
     totalRateioMensal + totalCopasa + totalFundoReserva + totalFundoObras + totalDecimoTerceiro;
@@ -122,8 +145,8 @@ export function computePdfData(opts: {
   // Compute per-unit
   const totalIndice = apartments.reduce((s, a) => s + (Number(a.indiceCopasa) || 0), 0) || 1;
   const rateioMensalPorUnidade = totalRateioMensal / n;
-  const fundoReservaPorUnidade = store.fundoReserva ?? 0;
-  const fundoObrasPorUnidade = store.fundoObras ?? 0;
+  const fundoReservaPorUnidade = totalFundoReserva / n;
+  const fundoObrasPorUnidade = totalFundoObras / n;
   const decimoTerceiroPorUnidade = totalDecimoTerceiro / n;
 
   const unidades: UnidadeCobranca[] = apartments.map((apt) => {

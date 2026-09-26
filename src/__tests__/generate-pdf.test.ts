@@ -50,10 +50,10 @@ describe("computePdfData", () => {
     expect(result.totais.fundoReserva).toBe(500);
     // Fundo Obras = 200 * 2 unidades = 400
     expect(result.totais.fundoObras).toBe(400);
-    // 13º/Férias = 100 (total)
-    expect(result.totais.decimoTerceiroFeriasAdm).toBe(100);
-    // Total = 500 + 400 + 500 + 400 + 100 = 1900
-    expect(result.totais.total).toBe(1900);
+    // 13º/Férias = 100 * 2 unidades = 200 (valor é por unidade)
+    expect(result.totais.decimoTerceiroFeriasAdm).toBe(200);
+    // Total = 500 + 400 + 500 + 400 + 200 = 2000
+    expect(result.totais.total).toBe(2000);
   });
 
   it("generates 1 cobrança per unit when no inquilino", () => {
@@ -191,5 +191,47 @@ describe("computePdfData", () => {
     expect(result.totais.fundoReserva).toBe(0);
     expect(result.totais.fundoObras).toBe(0);
     expect(result.totais.decimoTerceiroFeriasAdm).toBe(0);
+  });
+
+  it("uses expense-line values for fundos/13º when lançados no mês, without double counting Configurações", () => {
+    // Cenário real do cliente: Fundo Reserva, Fundo Obras e 13º/Férias/ADM
+    // são lançados como despesas do mês (com valor que muda todo mês), mas
+    // Configurações ainda tem valores fixos por unidade cadastrados.
+    // O total do mês não pode somar os dois.
+    const store = makeStore({
+      apartments: Array.from({ length: 9 }, (_, i) => ({
+        id: `a${i}`,
+        numero: `${101 + i}`,
+        morador: `Morador ${i}`,
+        indiceCopasa: 10,
+      })),
+      fundoReserva: 999, // valor antigo em Configurações — não deve ser usado
+      fundoObras: 999,
+      decimoTerceiroFerias: 999,
+    });
+    const month: MonthData = {
+      expenses: [
+        { id: "e1", nome: "COPASA AGO/26", valor: 2304.23, tipoDivisao: "copasa" },
+        { id: "e2", nome: "DEPOSITO DO FUNDO RESERVA", valor: 2250, tipoDivisao: "igual" },
+        { id: "e3", nome: "Fundo de Obras", valor: 1800, tipoDivisao: "igual" },
+        { id: "e4", nome: "DEPÓSITO 13/FÉRIAS/ADM", valor: 358.38, tipoDivisao: "igual" },
+        { id: "e5", nome: "SALÁRIOS", valor: 1170.79, tipoDivisao: "igual" },
+        { id: "e6", nome: "MATERIAL DE LIMPEZA", valor: 231, tipoDivisao: "igual" },
+        { id: "e7", nome: "HONORÁRIO DE SÍNDICO", valor: 800, tipoDivisao: "igual" },
+      ],
+    };
+    const result = computePdfData({ store, month, cursor });
+
+    expect(result.totais.copasa).toBeCloseTo(2304.23, 2);
+    expect(result.totais.fundoReserva).toBeCloseTo(2250, 2);
+    expect(result.totais.fundoObras).toBeCloseTo(1800, 2);
+    expect(result.totais.decimoTerceiroFeriasAdm).toBeCloseTo(358.38, 2);
+    // Rateio mensal = apenas as despesas comuns (não fundos/13º/copasa)
+    expect(result.totais.rateioMensal).toBeCloseTo(1170.79 + 231 + 800, 2);
+    // Total geral = soma de tudo, sem duplicar (bate com o total real lançado)
+    expect(result.totais.total).toBeCloseTo(
+      2304.23 + 2250 + 1800 + 358.38 + 1170.79 + 231 + 800,
+      2,
+    );
   });
 });
