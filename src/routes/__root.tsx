@@ -13,7 +13,12 @@ import { useEffect, type ReactNode } from "react";
 import { Receipt, Settings, LogOut } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
-import { setCloudUserId, loadFromCloud, replaceStore } from "@/lib/condo-store";
+import {
+  setCloudUserId,
+  loadFromCloud,
+  replaceStore,
+  getLastUserEditAt,
+} from "@/lib/condo-store";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -145,9 +150,13 @@ function AuthGate() {
   useEffect(() => {
     if (user) {
       setCloudUserId(user.id);
-      // Load data from cloud on login
+      // Load data from cloud on login. Se a nuvem estiver lenta (ex.:
+      // instabilidade do Supabase) e o usuário já tiver feito uma edição
+      // local enquanto a resposta não chegava, não sobrescreve o que ele
+      // acabou de fazer com os dados antigos da nuvem.
+      const requestStartedAt = Date.now();
       loadFromCloud().then((cloudData) => {
-        if (cloudData) {
+        if (cloudData && getLastUserEditAt() < requestStartedAt) {
           replaceStore(cloudData);
         }
       });

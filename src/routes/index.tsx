@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Plus, Copy, Receipt, Lock } from "lucide-react";
 import {
+  defaultExpenses,
   ensureMonth,
   formatMonthLabel,
   monthKey,
@@ -62,6 +63,18 @@ function HomePage() {
   const month = ensureMonth(store, key);
   const label = formatMonthLabel(cursor);
   const isClosed = month.closed === true;
+
+  // Materializa o mês (com as despesas padrão) na primeira vez que ele é
+  // visitado. Sem isso, `ensureMonth` gera IDs novos a cada chamada para um
+  // mês ainda não salvo, então excluir um item mockado não encontrava o
+  // mesmo ID ao persistir e o item "voltava".
+  useEffect(() => {
+    setStore(
+      (s) =>
+        s.months[key] ? s : { ...s, months: { ...s.months, [key]: { expenses: defaultExpenses() } } },
+      { silent: true },
+    );
+  }, [key, setStore]);
 
   const now = new Date();
   const isCurrentMonth =

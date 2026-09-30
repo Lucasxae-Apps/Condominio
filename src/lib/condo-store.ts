@@ -56,7 +56,7 @@ const defaultStore: Store = {
   divisionRules: { "Água (Copasa)": "copasa" },
 };
 
-const defaultExpenses = (): Expense[] => [
+export const defaultExpenses = (): Expense[] => [
   { id: crypto.randomUUID(), nome: "Água (Copasa)", valor: 0, tipoDivisao: "copasa" },
   { id: crypto.randomUUID(), nome: "Limpeza", valor: 0, tipoDivisao: "igual" },
   { id: crypto.randomUUID(), nome: "Manutenção", valor: 0, tipoDivisao: "igual" },
@@ -169,9 +169,23 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-export function setStore(updater: (s: Store) => Store) {
+// Marca o instante da última mudança feita pelo usuário (não conta a
+// materialização silenciosa de um mês com despesas padrão). Usado para
+// evitar que um carregamento lento da nuvem (ex.: instabilidade do
+// Supabase) sobrescreva uma edição local mais recente com dados antigos.
+let lastUserEditAt = 0;
+
+export function getLastUserEditAt(): number {
+  return lastUserEditAt;
+}
+
+export function setStore(
+  updater: (s: Store) => Store,
+  opts?: { silent?: boolean },
+) {
   const next = pruneOldMonths(updater(current));
   current = next;
+  if (!opts?.silent) lastUserEditAt = Date.now();
   persistToStorage(next);
   listeners.forEach((l) => l());
 }
