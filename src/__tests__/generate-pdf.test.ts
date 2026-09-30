@@ -30,6 +30,7 @@ function makeMonth(): MonthData {
       { id: "e1", nome: "Água (Copasa)", valor: 400, tipoDivisao: "copasa" },
       { id: "e2", nome: "Energia", valor: 200, tipoDivisao: "igual" },
       { id: "e3", nome: "Limpeza", valor: 300, tipoDivisao: "igual" },
+      { id: "e4", nome: "Fundo de Obras", valor: 200, tipoDivisao: "igual" },
     ],
   };
 }
@@ -48,12 +49,12 @@ describe("computePdfData", () => {
     expect(result.totais.copasa).toBe(400);
     // Fundo Reserva = 250 * 2 unidades = 500
     expect(result.totais.fundoReserva).toBe(500);
-    // Fundo Obras = 200 * 2 unidades = 400
-    expect(result.totais.fundoObras).toBe(400);
+    // Fundo Obras = lançado no mês (200), não usa o fallback de Configurações
+    expect(result.totais.fundoObras).toBe(200);
     // 13º/Férias = 100 * 2 unidades = 200 (valor é por unidade)
     expect(result.totais.decimoTerceiroFeriasAdm).toBe(200);
-    // Total = 500 + 400 + 500 + 400 + 200 = 2000
-    expect(result.totais.total).toBe(2000);
+    // Total = 500 + 400 + 500 + 200 + 200 = 1800
+    expect(result.totais.total).toBe(1800);
   });
 
   it("generates 1 cobrança per unit when no inquilino", () => {
@@ -90,7 +91,7 @@ describe("computePdfData", () => {
     expect(result.unidades[0].cobrancas[0].fundoReserva).toBe(250);
 
     // Proprietário pays only Fundo de Obras
-    expect(result.unidades[0].cobrancas[1].fundoObras).toBe(200);
+    expect(result.unidades[0].cobrancas[1].fundoObras).toBe(100);
     expect(result.unidades[0].cobrancas[1].rateioMensal).toBe(0);
     expect(result.unidades[0].cobrancas[1].copasa).toBe(0);
     expect(result.unidades[0].cobrancas[1].fundoReserva).toBe(0);
@@ -171,7 +172,10 @@ describe("computePdfData", () => {
       fundoObras: 0,
       decimoTerceiroFerias: 0,
     });
-    const month = makeMonth();
+    // Sem lançamento de Fundo de Obras no mês -> não cai para Configurações
+    const month: MonthData = {
+      expenses: makeMonth().expenses.filter((e) => e.nome !== "Fundo de Obras"),
+    };
     const result = computePdfData({ store, month, cursor });
 
     expect(result.totais.fundoReserva).toBe(0);
@@ -185,12 +189,36 @@ describe("computePdfData", () => {
       fundoObras: undefined,
       decimoTerceiroFerias: undefined,
     });
-    const month = makeMonth();
+    // Sem lançamento de Fundo de Obras no mês -> não cai para Configurações
+    const month: MonthData = {
+      expenses: makeMonth().expenses.filter((e) => e.nome !== "Fundo de Obras"),
+    };
     const result = computePdfData({ store, month, cursor });
 
     expect(result.totais.fundoReserva).toBe(0);
     expect(result.totais.fundoObras).toBe(0);
     expect(result.totais.decimoTerceiroFeriasAdm).toBe(0);
+  });
+
+  it("não cobra Fundo de Obras do proprietário quando o fundo não é lançado no mês (unidade alugada)", () => {
+    // Quando o Fundo de Obras deixa de ser lançado, unidades alugadas devem
+    // gerar apenas a cobrança do inquilino (sem a cobrança extra do
+    // proprietário), reduzindo a contagem total de cobranças.
+    const store = makeStore({
+      apartments: [
+        { id: "a1", numero: "101", morador: "João", inquilino: "Carlos", indiceCopasa: 10 },
+        { id: "a2", numero: "102", morador: "Maria", indiceCopasa: 30 },
+      ],
+      fundoObras: 999, // valor antigo em Configurações — não deve ser usado
+    });
+    const month: MonthData = {
+      expenses: makeMonth().expenses.filter((e) => e.nome !== "Fundo de Obras"),
+    };
+    const result = computePdfData({ store, month, cursor });
+
+    expect(result.totais.fundoObras).toBe(0);
+    expect(result.unidades[0].cobrancas).toHaveLength(1);
+    expect(result.unidades[0].cobrancas[0].tipo).toBe("Inquilino");
   });
 
   it("uses expense-line values for fundos/13º when lançados no mês, without double counting Configurações", () => {

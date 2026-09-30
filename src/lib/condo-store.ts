@@ -24,6 +24,7 @@ export type Expense = {
 
 export type MonthData = {
   expenses: Expense[];
+  closed?: boolean; // mês encerrado: valores travados para edição
 };
 
 export type DivisionRules = Record<string, "igual" | "copasa">;
@@ -57,7 +58,6 @@ const defaultStore: Store = {
 
 const defaultExpenses = (): Expense[] => [
   { id: crypto.randomUUID(), nome: "Água (Copasa)", valor: 0, tipoDivisao: "copasa" },
-  { id: crypto.randomUUID(), nome: "Energia área comum", valor: 0, tipoDivisao: "igual" },
   { id: crypto.randomUUID(), nome: "Limpeza", valor: 0, tipoDivisao: "igual" },
   { id: crypto.randomUUID(), nome: "Manutenção", valor: 0, tipoDivisao: "igual" },
 ];
@@ -227,7 +227,8 @@ export function ensureMonth(store: Store, key: string): MonthData {
 }
 
 export function formatMonthLabel(d: Date): string {
-  return d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+  const mes = d.toLocaleDateString("pt-BR", { month: "long" });
+  return `${mes} ${d.getFullYear()}`;
 }
 
 export function getTipoDivisao(

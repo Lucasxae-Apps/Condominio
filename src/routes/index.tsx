@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useCallback } from "react";
-import { Plus, Copy, Receipt } from "lucide-react";
+import { Plus, Copy, Receipt, Lock } from "lucide-react";
 import {
   ensureMonth,
   formatMonthLabel,
@@ -51,9 +51,17 @@ function HomePage() {
   // Estado do confirm para copiar mês quando já tem dados
   const [confirmCopy, setConfirmCopy] = useState(false);
 
+  // Estado do confirm para encerrar o mês
+  const [confirmClose, setConfirmClose] = useState(false);
+
+  // Direção da última troca de mês, usada para animar a transição da tela
+  // (1 = avançou para o próximo mês, -1 = voltou para o mês anterior)
+  const [direction, setDirection] = useState<1 | -1>(1);
+
   const key = monthKey(cursor);
   const month = ensureMonth(store, key);
   const label = formatMonthLabel(cursor);
+  const isClosed = month.closed === true;
 
   const now = new Date();
   const isCurrentMonth =
@@ -91,6 +99,7 @@ function HomePage() {
   }
 
   function shiftMonth(delta: number) {
+    setDirection(delta > 0 ? 1 : -1);
     setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1));
   }
 
@@ -135,6 +144,17 @@ function HomePage() {
     }
   }
 
+  function closeMonth() {
+    setStore((s) => ({
+      ...s,
+      months: {
+        ...s.months,
+        [key]: { ...ensureMonth(s, key), closed: true },
+      },
+    }));
+    toast.success(`${label} encerrado. Os valores foram travados.`);
+  }
+
   return (
     <div className="min-h-screen bg-background pb-44">
       {/* Header */}
@@ -148,14 +168,23 @@ function HomePage() {
 
         <MonthSwitcher
           label={label}
+          monthKey={key}
+          direction={direction}
           isCurrentMonth={isCurrentMonth}
+          isClosed={isClosed}
           onPrev={() => shiftMonth(-1)}
           onNext={() => shiftMonth(1)}
         />
       </header>
 
       {/* Expenses list */}
-      <main className="mx-auto max-w-2xl px-4 py-4">
+      <main className="overflow-x-hidden">
+        <div
+          key={key}
+          className={`mx-auto max-w-2xl px-4 py-4 animate-in fade-in duration-300 ${
+            direction === 1 ? "slide-in-from-right-8" : "slide-in-from-left-8"
+          }`}
+        >
         <div className="rounded-2xl bg-card border border-border overflow-hidden shadow-sm">
           <div className="grid grid-cols-[minmax(0,1fr)_140px_44px] items-center gap-2 px-4 py-3 bg-secondary/60 text-xs font-semibold uppercase tracking-wider text-secondary-foreground">
             <span>Despesa</span>
@@ -170,7 +199,7 @@ function HomePage() {
               <p className="text-muted-foreground text-base mb-4">
                 Nenhuma despesa neste mês.
               </p>
-              {isAdmin && (
+              {isAdmin && !isClosed && (
                 <div className="flex flex-col sm:flex-row gap-2 justify-center">
                   <button
                     onClick={addExpense}
@@ -195,7 +224,7 @@ function HomePage() {
               key={e.id}
               expense={e}
               rules={store.divisionRules}
-              readOnly={!isAdmin}
+              readOnly={!isAdmin || isClosed}
               onChangeName={(name) =>
                 updateMonth((exps) =>
                   exps.map((x) => (x.id === e.id ? { ...x, nome: name } : x)),
@@ -215,8 +244,8 @@ function HomePage() {
             />
           ))}
 
-          {/* Add expense + copy buttons (ícones) */}
-          {month.expenses.length > 0 && isAdmin && (
+          {/* Add expense + copy + encerrar buttons (ícones) */}
+          {month.expenses.length > 0 && isAdmin && !isClosed && (
             <div className="flex items-center justify-end gap-1 border-t border-border px-2 py-2">
               <button
                 onClick={copyPreviousMonth}
@@ -225,6 +254,14 @@ function HomePage() {
                 className="inline-flex items-center justify-center rounded-lg size-10 text-muted-foreground hover:text-foreground hover:bg-accent/20 transition"
               >
                 <Copy className="size-5" />
+              </button>
+              <button
+                onClick={() => setConfirmClose(true)}
+                aria-label="Encerrar mês"
+                title="Encerrar mês"
+                className="inline-flex items-center justify-center rounded-lg size-10 text-muted-foreground hover:text-foreground hover:bg-accent/20 transition"
+              >
+                <Lock className="size-5" />
               </button>
               <button
                 onClick={addExpense}
@@ -240,6 +277,7 @@ function HomePage() {
 
         {/* Rateio detalhado por unidade */}
         {store.apartments.length > 0 && <RateioBreakdown data={pdfData} />}
+        </div>
       </main>
 
       {/* Fixed footer with total + add expense */}
@@ -249,11 +287,14 @@ function HomePage() {
             <div className="text-xs uppercase tracking-wider text-muted-foreground">
               Total do mês
             </div>
-            <div className="text-3xl font-extrabold text-foreground tabular-nums truncate">
+            <div
+              key={key}
+              className="text-3xl font-extrabold text-foreground tabular-nums truncate animate-in fade-in duration-300"
+            >
               {brl(total)}
             </div>
           </div>
-          {isAdmin && (
+          {isAdmin && !isClosed && (
             <button
               onClick={addExpense}
               aria-label="Adicionar despesa"
@@ -291,6 +332,20 @@ function HomePage() {
           doCopy();
         }}
         onCancel={() => setConfirmCopy(false)}
+      />
+
+      {/* Confirm encerrar mês */}
+      <ConfirmDeleteDialog
+        open={confirmClose}
+        title="Encerrar este mês?"
+        description={`Isso trava os valores de ${label} para que não sejam mais editados. Essa ação não pode ser desfeita.`}
+        confirmLabel="Encerrar mês"
+        destructive={false}
+        onConfirm={() => {
+          setConfirmClose(false);
+          closeMonth();
+        }}
+        onCancel={() => setConfirmClose(false)}
       />
     </div>
   );

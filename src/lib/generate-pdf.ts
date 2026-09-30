@@ -132,8 +132,10 @@ export function computePdfData(opts: {
   // configurado em Configurações. Nunca soma os dois (evita duplicação).
   const totalFundoReserva =
     totalFundoReservaExpense > 0 ? totalFundoReservaExpense : (store.fundoReserva ?? 0) * n;
-  const totalFundoObras =
-    totalFundoObrasExpense > 0 ? totalFundoObrasExpense : (store.fundoObras ?? 0) * n;
+  // Fundo de Obras não é permanente: quando não é lançado no mês, não cai
+  // para o valor de Configurações (diferente das demais taxas fixas), pois
+  // a qualquer momento deixa de ser cobrado.
+  const totalFundoObras = totalFundoObrasExpense;
   const totalDecimoTerceiro =
     totalDecimoTerceiroExpense > 0
       ? totalDecimoTerceiroExpense
@@ -156,8 +158,7 @@ export function computePdfData(opts: {
     const cobrancas: Cobranca[] = [];
 
     if (apt.inquilino?.trim()) {
-      // Unidade com inquilino: 2 cobranças
-      // Inquilino paga tudo exceto Fundo de Obras
+      // Unidade com inquilino: inquilino paga tudo exceto Fundo de Obras
       cobrancas.push({
         tipo: "Inquilino",
         nomePagador: apt.inquilino.trim(),
@@ -170,17 +171,20 @@ export function computePdfData(opts: {
           copasaUnidade + rateioMensalPorUnidade + fundoReservaPorUnidade + decimoTerceiroPorUnidade,
         ),
       });
-      // Proprietário paga só Fundo de Obras
-      cobrancas.push({
-        tipo: "Proprietário",
-        nomePagador: apt.morador,
-        copasa: 0,
-        rateioMensal: 0,
-        fundoReserva: 0,
-        decimoTerceiroFeriasAdm: 0,
-        fundoObras: round2(fundoObrasPorUnidade),
-        total: round2(fundoObrasPorUnidade),
-      });
+      // Proprietário paga só Fundo de Obras — só existe cobrança separada
+      // enquanto o Fundo de Obras estiver ativo no mês.
+      if (fundoObrasPorUnidade > 0) {
+        cobrancas.push({
+          tipo: "Proprietário",
+          nomePagador: apt.morador,
+          copasa: 0,
+          rateioMensal: 0,
+          fundoReserva: 0,
+          decimoTerceiroFeriasAdm: 0,
+          fundoObras: round2(fundoObrasPorUnidade),
+          total: round2(fundoObrasPorUnidade),
+        });
+      }
     } else {
       // Sem inquilino: proprietário paga tudo
       cobrancas.push({

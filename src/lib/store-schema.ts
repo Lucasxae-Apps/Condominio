@@ -17,6 +17,7 @@ const expenseSchema = z.object({
 
 const monthDataSchema = z.object({
   expenses: z.array(expenseSchema),
+  closed: z.boolean().optional(),
 });
 
 const divisionRulesSchema = z.record(z.string(), z.enum(["igual", "copasa"]));

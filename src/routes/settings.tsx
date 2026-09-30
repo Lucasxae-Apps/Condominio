@@ -513,10 +513,10 @@ function SettingsPage() {
               <select
                 value={selectedMonthKey}
                 onChange={(e) => setSelectedMonthKey(e.target.value)}
-                className="mt-1 w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base capitalize min-h-[44px]"
+                className="mt-1 w-full bg-background border border-border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-ring text-base min-h-[44px]"
               >
                 {exportableMonths.map((m) => (
-                  <option key={m.key} value={m.key} className="capitalize">
+                  <option key={m.key} value={m.key}>
                     {m.label}
                   </option>
                 ))}
